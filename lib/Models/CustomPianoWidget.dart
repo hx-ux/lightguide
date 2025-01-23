@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:get/get_connect/http/src/utils/utils.dart';
 import 'package:lightguide/Models/MusicalScale.dart';
 
 class CustomPianoKeyboard extends StatefulWidget {
@@ -14,8 +13,10 @@ class CustomPianoKeyboard extends StatefulWidget {
 class _CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
   @override
   Widget build(BuildContext context) {
-    double globalWidth = 30;
-    double globalHeight = 30;
+    var screenSize = MediaQuery.of(context).size;
+  
+    double singlekeyWidth = screenSize.width/ 13;
+    double globalHeight =  screenSize.height*0.1;
 
     return Column(
       children: [
@@ -32,7 +33,7 @@ class _CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
                           isActive: key.isActive,
                           isFlat: key.isFlat(),
                           Colors.blue),
-                      size: Size(globalWidth, globalHeight),
+                      size: Size(singlekeyWidth, globalHeight),
                     ),
                     Text(key.noteName.toString()),
                   ],

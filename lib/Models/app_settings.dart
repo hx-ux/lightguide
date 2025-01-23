@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 class AppSettings {
-  static int width = 400;
-  static int height = 400;
+  static int width = 800;
+  static int height = 600;
 
   static const String _settingsFolderName = "lightguide";
   static final String settingsFolderPath =

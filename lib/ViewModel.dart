@@ -9,17 +9,21 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 class ViewModel extends GetxController {
   var foundDeviceAndEtablishedConnection = false.obs;
   var devices = <HidDevice>[].obs;
-  var globalSammlung = MappedScale().obs;
+  var globalSammlung = CollectionScale(ControllerProperties.templates[0]).obs;
   ControllerProperties controller = ControllerProperties.templates[0];
+
   var selectedRootNote = mappedRootNotes[0].toString().obs;
-  var selectedScale = GuiScaleNames[0].toString().obs;
+  var selectedScale = guiScaleNames[0].toString().obs;
 
-  ColorDerivative selectedColor = ColorDerivative.fromColor(Colors.blue);
-
+  String selectedColor = ColorKeysName[0];
   late final HidDevice device;
 
-  void setColor(ColorDerivative col) =>
-      globalSammlung.value.activekeysToBytes(colIn: col.toColor());
+  void setColor(String col) {
+    selectedColor = col;
+    
+    print(col); 
+    globalSammlung.value.activekeysToBytes(colIn: mappedKeyColors[col] ?? Colors.blue);
+  }
 
   Future<void> disconnectDevice() async {
     if (device.isOpen) {
@@ -41,7 +45,7 @@ class ViewModel extends GetxController {
     Note? rootNote =
         mappedRootNotes[getIndexByNote(Note.parse(selectedRootNote.value))];
 
-    ScalePattern? scale = getObjectByKey(selectedScale.value);
+    ScalePattern? scale = getScaleObjectByKey(selectedScale.value);
 
     if (rootNote != null && scale != null) {
       var s = scale.on(rootNote);

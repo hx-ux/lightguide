@@ -1,8 +1,8 @@
-import 'package:faabul_color_picker/faabul_color_picker.dart';
-import 'package:flutter/services.dart';
+import 'package:desktop_window/desktop_window.dart';
 import 'package:get/get.dart';
 import 'package:lightguide/Models/CustomPianoWidget.dart';
 import 'package:lightguide/Models/MusicalScale.dart';
+import 'package:lightguide/Models/app_settings.dart';
 import 'package:lightguide/Theme/Theme.dart';
 import 'package:lightguide/ViewModel.dart';
 import 'package:lightguide/Widgets/ConnectionBade.dart';
@@ -11,11 +11,15 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 ThemeData? theme = themes['dark']!;
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(systemNavigationBarColor: Colors.transparent));
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  await DesktopWindow.setWindowSize(
+      Size(AppSettings.width.toDouble(), AppSettings.height.toDouble()));
+  await DesktopWindow.setMinWindowSize(const Size(600, 600));
+  await DesktopWindow.focus();
+
+  await AppSettings.createSettingsStructure();
+
   runApp(const App());
 }
 
@@ -23,9 +27,8 @@ class App extends StatelessWidget {
   const App({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return ShadcnApp(home: const MyHomePage(), theme: theme!);
-  }
+  Widget build(BuildContext context) =>
+      ShadcnApp(home: const MyHomePage(), theme: theme!);
 }
 
 class MyHomePage extends StatefulWidget {
@@ -71,13 +74,15 @@ class _MyHomePageState extends State<MyHomePage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    PrimaryButton(
-                      child: const Text('Color Picker'),
-                    ),
+                    const Text("Color "),
+                    ColorPicker(viewModel: viewModel),
 
                     /// Root Note
                     Text("Root Note: "),
+
                     Select<String>(
+                      autoClosePopover: true,
+                      orderSelectedFirst: false,
                       itemBuilder: (context, item) {
                         return Text(item);
                       },
@@ -105,6 +110,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     Text("Scale"),
                     Select<String>(
+                      // important
+                      autoClosePopover: true,
+                      orderSelectedFirst: false,
                       itemBuilder: (context, item) {
                         return Text(item);
                       },
@@ -120,12 +128,12 @@ class _MyHomePageState extends State<MyHomePage> {
                       onChanged: (value) {
                         viewModel.setScale(value!);
                       },
-                      placeholder: Text(GuiScaleNames[0].toString()),
+                      placeholder: Text(guiScaleNames[0].toString()),
                       value: viewModel.selectedScale.value,
                       children: [
                         SelectGroup(
                           children: [
-                            for (var key in GuiScaleNames) ...[
+                            for (var key in guiScaleNames) ...[
                               SelectItemButton(
                                 value: key,
                                 child: Text(key),
@@ -136,13 +144,65 @@ class _MyHomePageState extends State<MyHomePage> {
                       ],
                     ),
                   ],
-                ).gap(20),
+                ),
                 SizedBox(height: MediaQuery.sizeOf(context).height * .4),
                 Obx(() => CustomPianoKeyboard(
-                    mappedNotes: viewModel.globalSammlung.value.toPianokeys())),
+                    mappedNotes:
+                        viewModel.globalSammlung.value.toPianokeys())).center(),
               ],
             )
           : const WelcomeScreenSetupGuide().center()),
+    );
+  }
+}
+
+class ColorPicker extends StatelessWidget {
+  const ColorPicker({
+    super.key,
+    required this.viewModel,
+  });
+
+  final ViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Select<String>(
+      itemBuilder: (context, item) {
+        return Container(
+          width: 20,
+          height: 20,
+          color: mappedKeyColors[item],
+        );
+      },
+      popupConstraints: const BoxConstraints(
+        maxHeight: 300,
+        maxWidth: 10,
+      ),
+      onChanged: (value) {
+        viewModel.setColor(value!);
+      },
+      placeholder: Container(
+        width: 20,
+        height: 20,
+        color: mappedKeyColors[ColorKeysName[0]],
+      ),
+      value: viewModel.selectedColor.toString(),
+      children: [
+        SelectGroup(
+          children: [
+            for (var col in mappedKeyColors.entries) ...[
+              SelectItemButton(
+                value: col.key,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  color: col.value,
+                ),
+              )
+            ]
+          ],
+        ),
+      ],
     );
   }
 }

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:get/get_connect/http/src/utils/utils.dart';
+import 'package:lightguide/Models/ControllerProperties.dart';
 import 'package:lightguide/Models/app_settings.dart';
 import 'package:lightguide/Models/favourites.dart';
 import 'package:music_notes/music_notes.dart';
@@ -19,8 +19,12 @@ class Pianokeys {
       {required this.position, required this.noteName, required this.isActive});
 }
 
-class MappedScale {
+class CollectionScale {
+  final ControllerProperties controllerproperties;
   List<int> activeKeys = [];
+
+  CollectionScale(this.controllerproperties);
+  bool isControllerConnected=false;
 
   List<Pianokeys> toPianokeys() {
     List<Pianokeys> p = [];
@@ -54,15 +58,6 @@ Uint8List rgbToUint8(Color selcol) {
   int red = (selcol.red >> 16) & 0xFF;
   int green = (selcol.green >> 8) & 0xFF;
   int blue = selcol.blue & 0xFF;
-
-  // print("new col" +
-  //     red.toString() +
-  //     " " +
-  //     green.toString() +
-  //     " " +
-  //     blue.toString() +
-  //     " ");
-
   return Uint8List.fromList([red, green, blue]);
 }
 
@@ -83,26 +78,39 @@ Map<int, Note> mappedRootNotes = {
 
 Map<String, ScalePattern> mappedScales = {
   "major": ScalePattern.major,
-  "minor": ScalePattern.naturalMinor
+  "minor": ScalePattern.naturalMinor,
+  "harmonic minor": ScalePattern.harmonicMinor,
+  "melodic minor": ScalePattern.melodicMinor,
+  "dorian": ScalePattern.dorian,
+  "phrygian": ScalePattern.phrygian,
+  "lydian": ScalePattern.lydian,
+  "mixolydian": ScalePattern.mixolydian,
+  "locrian": ScalePattern.locrian,
+  "whole tone": ScalePattern.wholeTone,
+  "chromatic": ScalePattern.chromatic,
+  "major pentatonic": ScalePattern.majorPentatonic,
 };
 
-List<String> GuiScaleNames = mappedScales.keys.toList();
+List<String> guiScaleNames = mappedScales.keys.toList();
 
 
+Map<String, Color> mappedKeyColors = {
+  "red": Colors.red,
+  "orange": Colors.orange,
+  "yellow": Colors.yellow,
+  "green": Colors.green,
+  "blue": Colors.blue,
+  "pink": Colors.pink,
+};
 
-String? getNamebyObject(ScalePattern p) {
-  var key = mappedScales.keys.firstWhere((k) => mappedScales[k] == p);
-  return key;
-}
+List<String> ColorKeysName = mappedKeyColors.keys.toList();
 
-ScalePattern? getObjectByKey(String p) {
-  return mappedScales.containsKey(p) ? mappedScales[p] : null;
-}
 
-void saveAsFavourite(Favourites f) {
-  File(AppSettings.favouritesFilePath)
-      .writeAsString(f.toFile, mode: FileMode.append);
-}
+String? getScaleNamebyObject(ScalePattern p) => mappedScales.keys.firstWhere((k) => mappedScales[k] == p);
+
+ScalePattern? getScaleObjectByKey(String p) => mappedScales.containsKey(p) ? mappedScales[p] : null;
+
+
 
 Future<List<Favourites>> getFavourites() async {
   File f = File(AppSettings.favouritesFilePath);

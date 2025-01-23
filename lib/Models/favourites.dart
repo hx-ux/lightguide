@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:lightguide/Models/app_settings.dart';
 import 'package:music_notes/music_notes.dart';
 
 class Favourites {
@@ -18,4 +21,11 @@ class Favourites {
   @override
   String toString() => "${note.toString()}|$scale|$displayName";
   String get toFile => "${toString()}\r\n";
+
+  void saveAsFavourite(Favourites f) {
+    if (!File(AppSettings.favouritesFilePath).existsSync()) {
+      File(AppSettings.favouritesFilePath)
+          .writeAsString(f.toFile, mode: FileMode.append);
+    }
+  }
 }
