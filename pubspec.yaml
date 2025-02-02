@@ -20,6 +20,7 @@ dependencies:
   shadcn_flutter: ^0.0.21
   provider: ^6.1.2
   music_notes: ^0.19.1
+  desktop_window: ^0.4.2
 
 dev_dependencies:
   flutter_test:
