@@ -315,14 +315,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.23"
-  flutter_solidart:
-    dependency: "direct main"
-    description:
-      name: flutter_solidart
-      sha256: "15a8aac40101d25e7645d61a08c9d4c44407bba11843dd95295f154c3a4f7b3f"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.7.1"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -682,14 +674,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.99"
-  solidart:
-    dependency: transitive
-    description:
-      name: solidart
-      sha256: "2d15608b60fff6cf1ed39b4161bde03caddacf6656275d3bedeb3605edfc60e9"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.5.4"
   solidart_lint:
     dependency: "direct dev"
     description:
