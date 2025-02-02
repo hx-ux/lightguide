@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:lightguide/Models/MusicalScale.dart';
+import 'package:lightguide/Mappings/mappings_note_scales.dart';
+import 'package:lightguide/Models/pianokeys.dart';
 
 class CustomPianoKeyboard extends StatefulWidget {
   final List<Pianokeys> mappedNotes;
+  final Color keysColor;
 
-  const CustomPianoKeyboard({super.key, required this.mappedNotes});
+  const CustomPianoKeyboard(
+      {super.key, required this.mappedNotes, required this.keysColor});
 
   @override
   _CustomPianoKeyboardState createState() => _CustomPianoKeyboardState();
@@ -14,9 +17,9 @@ class _CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
   @override
   Widget build(BuildContext context) {
     var screenSize = MediaQuery.of(context).size;
-  
-    double singlekeyWidth = screenSize.width/ 13;
-    double globalHeight =  screenSize.height*0.1;
+
+    double singlekeyWidth = screenSize.width / 13;
+    double globalHeight = screenSize.height * 0.1;
 
     return Column(
       children: [
@@ -32,7 +35,7 @@ class _CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
                       painter: PianoKeyPainter(
                           isActive: key.isActive,
                           isFlat: key.isFlat(),
-                          Colors.blue),
+                          color: widget.keysColor),
                       size: Size(singlekeyWidth, globalHeight),
                     ),
                     Text(key.noteName.toString()),
@@ -49,9 +52,9 @@ class _CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
 class PianoKeyPainter extends CustomPainter {
   final bool isActive;
   final bool isFlat;
-  final Color isActivecolor;
-  PianoKeyPainter(this.isActivecolor,
-      {required this.isActive, required this.isFlat});
+  final Color color;
+  PianoKeyPainter(
+      {required this.color, required this.isActive, required this.isFlat});
   @override
   void paint(Canvas canvas, Size size) {
     Offset basePosition = Offset(size.width / 2, size.height / 2);
@@ -68,8 +71,8 @@ class PianoKeyPainter extends CustomPainter {
         center: basePosition, width: size.width, height: size.height / 4);
     canvas.drawRect(base, Paint()..color = isFlat ? Colors.grey : Colors.white);
 
-    canvas.drawRect(indictaor,
-        Paint()..color = isActive ? isActivecolor : Colors.transparent);
+    canvas.drawRect(
+        indictaor, Paint()..color = isActive ? color : Colors.transparent);
   }
 
   @override

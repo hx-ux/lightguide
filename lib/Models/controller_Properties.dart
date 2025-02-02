@@ -13,9 +13,8 @@ class ControllerProperties {
       required this.vendorId,
       required this.productId,
       required this.keysCount,
-      required this.testingstate
-      });
-      
+      required this.testingstate});
+
   static final List<ControllerProperties> templates = [
     ControllerProperties(
         reportID: 0x82,
@@ -25,4 +24,8 @@ class ControllerProperties {
         keysCount: 49,
         testingstate: Testingstate.working)
   ];
+
+  toInfoString() {
+    return "Name: $name TestingState: $testingstate";
+  }
 }

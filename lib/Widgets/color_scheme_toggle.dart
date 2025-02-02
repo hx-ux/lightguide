@@ -1,6 +1,6 @@
   import 'package:shadcn_flutter/shadcn_flutter.dart';
 
-Widget ColorShemeButtons() {
+Widget colorSchemeToggle() {
     return IconButton.primary(
       onPressed: () {},
       density: ButtonDensity.icon,
