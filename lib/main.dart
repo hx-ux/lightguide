@@ -1,4 +1,3 @@
-import 'package:faabul_color_picker/faabul_color_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:lightguide/Models/CustomPianoWidget.dart';
