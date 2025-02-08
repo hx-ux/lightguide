@@ -7,7 +7,6 @@ import 'package:lightguide/Models/app_settings.dart';
 import 'package:lightguide/Theme/Theme.dart';
 import 'package:lightguide/ViewModel.dart';
 import 'package:lightguide/Widgets/connection_bade.dart';
-import 'package:lightguide/Widgets/welcome_screen_setup_guide.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 ThemeData? theme = themes['dark']!;
@@ -46,48 +45,53 @@ class _MyHomePageState extends State<MyHomePage> {
       headers: [
         AppBar(
           leading: [
-            const Text('Light Guide').h1(),
+            const Text('Light Guide').h3(),
             const SizedBox(width: 10),
             Obx(() => connectionBadge(controller.connectedToDevice.value)),
           ],
           trailing: [
+            IconButton(
+              onPressed: controller.disconnectDevice,
+              icon: const Icon(Icons.settings),
+              variance: ButtonVariance.menu,
+            ),
             Obx(() => controller.connectedToDevice.value
-                ? PrimaryButton(
+                ? IconButton(
                     onPressed: controller.disconnectDevice,
-                    trailing: const Icon(Icons.logout),
-                    child: const Text('Disconnect'),
+                    icon: const Icon(Icons.logout),
+                    variance: ButtonVariance.destructive,
                   )
-                : PrimaryButton(
+                : IconButton(
                     onPressed: controller.connectDevice,
-                    trailing: const Icon(Icons.login),
-                    child: const Text('Connect'),
+                    icon: const Icon(Icons.login),
+                    variance: ButtonVariance.primary,
                   )),
           ],
         ),
       ],
-      child: Obx(() => controller.connectedToDevice.value
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Color ").withPadding(horizontal: 10),
-                    colorPicker(controller).withPadding(horizontal: 10),
-                    const Text("Root Note: ").withPadding(horizontal: 10),
-                    rootNotePicker(controller).withPadding(horizontal: 10),
-                    const Text("Scale").withPadding(horizontal: 10),
-                    scalePicker(controller).withPadding(horizontal: 10),
-                  ],
-                ),
-                SizedBox(height: MediaQuery.sizeOf(context).height * .7),
-                Obx(() => CustomPianoKeyboard(
-                      mappedNotes: controller.collectionScale.value.toOctave(),
-                      keysColor: controller.selectedColorAsColor,
-                    )).center(),
-              ],
-            )
-          : const WelcomeScreenSetupGuide().center()),
+      child: Obx(() => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Color ").withPadding(horizontal: 10),
+                  colorPicker(controller).withPadding(horizontal: 10),
+                  const Text("Root Note: ").withPadding(horizontal: 10),
+                  rootNotePicker(controller).withPadding(horizontal: 10),
+                  const Text("Scale").withPadding(horizontal: 10),
+                  scalePicker(controller).withPadding(horizontal: 10),
+                ],
+              ),
+              SizedBox(height: MediaQuery.sizeOf(context).height * .2),
+              Obx(() => 
+              
+              CustomPianoKeyboard(
+                    mappedNotes: controller.collectionScale.value.toOctave(),
+                    keysColor: controller.selectedColorAsColor,
+                  )).paddingOnly(left: 50)
+            ],
+          )),
     );
   }
 
