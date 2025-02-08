@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:lightguide/Mappings/mappings_note_scales.dart';
 import 'package:lightguide/Models/pianokeys.dart';
+
+double singleKeywidth = 60;
+double singleKeyHeight = 40;
+double paddingbetweenKeys = 2;
+double globalHeight = singleKeyHeight + 20;
 
 class CustomPianoKeyboard extends StatefulWidget {
   final List<Pianokeys> mappedNotes;
@@ -18,61 +22,75 @@ class _CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
   Widget build(BuildContext context) {
     var screenSize = MediaQuery.of(context).size;
 
-    double singlekeyWidth = screenSize.width / 13;
-    double globalHeight = screenSize.height * 0.1;
-
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var key in widget.mappedNotes)
-              Padding(
-                padding: const EdgeInsets.all(0.5),
-                child: Column(
-                  children: [
-                    CustomPaint(
-                      painter: PianoKeyPainter(
-                          isActive: key.isActive,
-                          isFlat: key.isFlat(),
-                          color: widget.keysColor),
-                      size: Size(singlekeyWidth, globalHeight),
-                    ),
-                    Text(key.noteName.toString()),
-                  ],
-                ),
-              ),
-          ],
-        )
-      ],
+    return SizedBox(
+      child: CustomPaint(
+        painter:
+            BaseKeyPainter(keys: widget.mappedNotes, color: widget.keysColor),
+        size: Size(screenSize.width, globalHeight),
+      ),
     );
   }
 }
 
-class PianoKeyPainter extends CustomPainter {
-  final bool isActive;
-  final bool isFlat;
+class BaseKeyPainter extends CustomPainter {
+  final List<Pianokeys> keys;
   final Color color;
-  PianoKeyPainter(
-      {required this.color, required this.isActive, required this.isFlat});
+  BaseKeyPainter({
+    required this.color,
+    required this.keys,
+  });
   @override
   void paint(Canvas canvas, Size size) {
-    Offset basePosition = Offset(size.width / 2, size.height / 2);
+    var black = keys.where((element) => element.isFlat()).toList();
+    var white = keys.where((element) => !element.isFlat()).toList();
 
-    Offset basePositionShifted = Offset(size.width / 2, size.height / 4);
+    double currentPos = 0;
 
-    Rect base = Rect.fromCenter(
-        center: !isFlat ? basePosition : basePositionShifted,
-        width: size.width,
-        height: size.height);
-    canvas.drawRect(base, Paint()..color = isFlat ? Colors.grey : Colors.white);
+    for (var key in white) {
+      canvas.drawRect(
+          Rect.fromCenter(
+              center: Offset(currentPos, 0),
+              width: singleKeywidth,
+              height: singleKeyHeight),
+          Paint()..color = Colors.white);
 
-    Rect indictaor = Rect.fromCenter(
-        center: basePosition, width: size.width, height: size.height / 4);
-    canvas.drawRect(base, Paint()..color = isFlat ? Colors.grey : Colors.white);
+      if (key.isActive) {
+        canvas.drawRect(
+            Rect.fromCenter(
+                center: Offset(currentPos, 0),
+                width: singleKeywidth * 0.9,
+                height: singleKeyHeight * 0.2),
+            Paint()..color = color);
+      }
 
-    canvas.drawRect(
-        indictaor, Paint()..color = isActive ? color : Colors.transparent);
+      currentPos = currentPos + singleKeywidth + paddingbetweenKeys;
+    }
+
+    currentPos = singleKeywidth * 0.5 + paddingbetweenKeys;
+
+    for (var key in black) {
+      canvas.drawRect(
+          Rect.fromCenter(
+              center: Offset(currentPos, (singleKeyHeight / 8) * -1),
+              width: singleKeywidth * 0.5,
+              height: singleKeyHeight * 0.8),
+          Paint()..color = Colors.grey);
+
+      if (black.elementAt(1) == key) {
+        currentPos = currentPos + (singleKeywidth * 0.5) * 2;
+      }
+      currentPos =
+          currentPos + ((singleKeywidth * 0.5) * 2) + paddingbetweenKeys;
+
+      if (key.isActive) {
+        canvas.drawRect(
+            Rect.fromCenter(
+                center: Offset(currentPos, 0),
+                width: singleKeywidth * 0.4,
+                height: singleKeyHeight * 0.8),
+            Paint()..color = color);
+      }
+    }
   }
 
   @override

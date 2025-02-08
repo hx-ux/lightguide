@@ -4,7 +4,7 @@ import 'package:path/path.dart' as p;
 class AppSettings {
   static const String version="1.0.0"; 
   static int width = 800;
-  static int height = 600;
+  static int height = 300;
   static const String _settingsFolderName = "lightguide";
   static final String settingsFolderPath = Platform.isWindows
       ? '${Platform.environment['USERPROFILE']}\\Desktop\\$_settingsFolderName'
