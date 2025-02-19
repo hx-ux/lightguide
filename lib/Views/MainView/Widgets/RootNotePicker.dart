@@ -1,12 +1,12 @@
 import 'package:get/get.dart';
 import 'package:lightguide/Mappings/mappings_note_scales.dart';
-import 'package:lightguide/ViewModel.dart';
+import 'package:lightguide/Controller/MainController.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class RootNotePicker extends StatefulWidget {
   const RootNotePicker({super.key, required this.viewModel});
 
-  final MainViewModel viewModel;
+  final MainViewController viewModel;
   @override
   State<RootNotePicker> createState() => _RootNotePickerState();
 }

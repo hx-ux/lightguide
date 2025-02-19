@@ -7,7 +7,7 @@ import 'package:lightguide/Mappings/mappings_note_scales.dart';
 import 'package:lightguide/Models/pianokeys.dart';
 import 'package:music_notes/music_notes.dart';
 
-class MainViewModel extends GetxController {
+class MainViewController extends GetxController {
   var connectedToDevice = false.obs;
   var selectedDevice = 0.obs;
   var autoConnect = false.obs;

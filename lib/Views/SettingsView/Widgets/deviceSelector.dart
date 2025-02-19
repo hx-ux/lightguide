@@ -1,10 +1,10 @@
 import 'package:get/get.dart';
 import 'package:lightguide/Models/controller_Properties.dart';
-import 'package:lightguide/ViewModel.dart';
+import 'package:lightguide/Controller/MainController.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class DeviceSelector extends StatefulWidget {
-  MainViewModel get viewModel => Get.find();
+  MainViewController get viewModel => Get.find();
   const DeviceSelector({
     super.key,
   });

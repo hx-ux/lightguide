@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
 import 'package:lightguide/Mappings/mappings_note_scales.dart';
-import 'package:lightguide/ViewModel.dart';
+import 'package:lightguide/Controller/MainController.dart';
 import 'package:lightguide/Views/MainView/main_view.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -10,7 +10,7 @@ class ColorPicker extends StatefulWidget {
     required this.viewModel,
   });
 
-  final MainViewModel viewModel;
+  final MainViewController viewModel;
 
   @override
   State<ColorPicker> createState() => _ColorPickerState();

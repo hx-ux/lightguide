@@ -1,11 +1,11 @@
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
 import 'package:lightguide/Views/MainView/Widgets/custom_piano_widget.dart';
-import 'package:lightguide/ViewModel.dart';
+import 'package:lightguide/Controller/MainController.dart';
 import 'package:lightguide/Views/MainView/Widgets/RootNotePicker.dart';
 import 'package:lightguide/Views/MainView/Widgets/color_picker.dart';
 import 'package:lightguide/Views/MainView/Widgets/scale_picker.dart';
-import 'package:lightguide/Widgets/connection_bade.dart';
+import 'package:lightguide/Views/SettingsView/Widgets/connection_bade.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class MainView extends StatelessWidget {
@@ -13,7 +13,7 @@ class MainView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(MainViewModel());
+    final controller = Get.put(MainViewController());
     return Scaffold(
         headers: [
           AppBar(

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lightguide/Mappings/mappings_note_scales.dart';
 import 'package:lightguide/Models/pianokeys.dart';
-import 'package:lightguide/ViewModel.dart';
+import 'package:lightguide/Controller/MainController.dart';
 
 double singleKeywidth = 60;
 double singleKeyHeight = 40;
@@ -10,7 +10,7 @@ double paddingbetweenKeys = 2;
 double globalHeight = singleKeyHeight + 20;
 
 class CustomPianoKeyboard extends StatefulWidget {
-  final MainViewModel controller;
+  final MainViewController controller;
   const CustomPianoKeyboard({super.key, required this.controller});
 
   @override
@@ -18,7 +18,7 @@ class CustomPianoKeyboard extends StatefulWidget {
 }
 
 class CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
-  final controller = Get.put(MainViewModel());
+  final controller = Get.put(MainViewController());
   @override
   Widget build(BuildContext context) {
     var screenSize = MediaQuery.of(context).size;

@@ -1,10 +1,10 @@
 import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:lightguide/Mappings/mappings_note_scales.dart';
-import 'package:lightguide/ViewModel.dart';
+import 'package:lightguide/Controller/MainController.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class ScalePicker extends StatefulWidget {
-  final MainViewModel viewModel;
+  final MainViewController viewModel;
 
   const ScalePicker({Key? key, required this.viewModel}) : super(key: key);
 
