@@ -1,4 +1,16 @@
 enum Testingstate { none, testing, working }
+extension TestingstateExtension on Testingstate {
+  String get info {
+    switch (this) {
+      case Testingstate.none:
+        return "No testing in progress.";
+      case Testingstate.testing:
+        return "Currently in testing phase.";
+      case Testingstate.working:
+        return "working";
+    }
+  }
+}
 
 class ControllerProperties {
   final String name;
@@ -26,6 +38,6 @@ class ControllerProperties {
   ];
 
   toInfoString() {
-    return "Name: $name TestingState: $testingstate";
+    return " $name (${testingstate.info})";
   }
 }

@@ -44,14 +44,12 @@ class CollectionScale {
     return toSendBytes.toBytes();
   }
 
-    List<int> setNotesByScale(List<Note> primaryList) {
+  void setNotesByScale(List<Note> primaryList) {
     var cuttedScale = List.from(primaryList)..removeLast();
     List<int> d = [];
     for (var element in cuttedScale) {
       d.add(getIndexByNote(element));
     }
     activeKeys = d;
-    return d;
   }
-
 }

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:lightguide/Mappings/mappings_note_scales.dart';
 import 'package:lightguide/Models/pianokeys.dart';
+import 'package:lightguide/ViewModel.dart';
 
 double singleKeywidth = 60;
 double singleKeyHeight = 40;
@@ -7,27 +10,28 @@ double paddingbetweenKeys = 2;
 double globalHeight = singleKeyHeight + 20;
 
 class CustomPianoKeyboard extends StatefulWidget {
-  final List<Pianokeys> mappedNotes;
-  final Color keysColor;
-
-  const CustomPianoKeyboard(
-      {super.key, required this.mappedNotes, required this.keysColor});
+  final MainViewModel controller;
+  const CustomPianoKeyboard({super.key, required this.controller});
 
   @override
-  _CustomPianoKeyboardState createState() => _CustomPianoKeyboardState();
+  CustomPianoKeyboardState createState() => CustomPianoKeyboardState();
 }
 
-class _CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
+class CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
+  final controller = Get.put(MainViewModel());
   @override
   Widget build(BuildContext context) {
     var screenSize = MediaQuery.of(context).size;
 
     return SizedBox(
-      child: CustomPaint(
-        painter:
-            BaseKeyPainter(keys: widget.mappedNotes, color: widget.keysColor),
-        size: Size(screenSize.width, globalHeight),
-      ),
+      child: Obx(() {
+        return CustomPaint(
+          painter: BaseKeyPainter(
+              keys: controller.collectionScale.value.toOctave(),
+              color: mappedKeyColors[controller.selectedColor.value]!),
+          size: Size(screenSize.width, globalHeight),
+        );
+      }),
     );
   }
 }
