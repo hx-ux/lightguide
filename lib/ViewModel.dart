@@ -6,25 +6,27 @@ import 'package:lightguide/Models/hardware_device.dart';
 import 'package:lightguide/Models/collection_scale.dart';
 import 'package:lightguide/Models/controller_Properties.dart';
 import 'package:lightguide/Mappings/mappings_note_scales.dart';
+import 'package:lightguide/Models/pianokeys.dart';
 import 'package:music_notes/music_notes.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class MainViewModel extends GetxController {
   var connectedToDevice = false.obs;
   var selectedDevice = 0.obs;
-
-  late ControllerProperties controller;
+  var autoConnect = false.obs;
+  late ControllerProperties controllerProperties;
   var collectionScale = CollectionScale(ControllerProperties.templates[0]).obs;
-  HardwareDevice? hardwareDevice;
+  late HardwareDevice hardwareDevice;
+  var vmPianoKeys = <Pianokeys>[].obs;
 
   @override
   Future<void> onInit() async {
     super.onInit();
 
-    controller = ControllerProperties.templates[selectedDevice.value];
-    collectionScale.value = CollectionScale(controller);
-
-    if (true) {
+    controllerProperties = ControllerProperties.templates[selectedDevice.value];
+    collectionScale.value = CollectionScale(controllerProperties);
+    hardwareDevice = HardwareDevice(controllerProperties);
+    if (autoConnect.value) {
       await connectDevice();
     }
     updateDeviceAndView();
@@ -34,7 +36,6 @@ class MainViewModel extends GetxController {
   RxString selectedScale = RxString(guiScaleNames[0]);
   var selectedColor = colorKeysName[0].obs;
 
-
   void setColor(String col) {
     selectedColor.value = col;
     updateDeviceAndView();
@@ -42,7 +43,7 @@ class MainViewModel extends GetxController {
 
   Future<void> connectDevice() async {
     try {
-      hardwareDevice = HardwareDevice(controller);
+      hardwareDevice = HardwareDevice(controllerProperties);
       final result = await hardwareDevice?.connectDevice() ?? false;
       connectedToDevice.value = result;
     } catch (e) {
@@ -69,6 +70,8 @@ class MainViewModel extends GetxController {
       update();
       if (scaled.degrees.isNotEmpty && scaled.degrees.isNotEmpty) {
         collectionScale.value.setNotesByScale(scaled.degrees);
+        vmPianoKeys.value = collectionScale.value.intKeysToNotes();
+
         print("root note ${rootNote}");
         print("Scale ${scaled.toString()}");
         if (hardwareDevice != null) {

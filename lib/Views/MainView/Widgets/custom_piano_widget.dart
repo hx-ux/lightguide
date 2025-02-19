@@ -27,7 +27,7 @@ class CustomPianoKeyboardState extends State<CustomPianoKeyboard> {
       child: Obx(() {
         return CustomPaint(
           painter: BaseKeyPainter(
-              keys: controller.collectionScale.value.toOctave(),
+              keys: controller.vmPianoKeys.value!,
               color: mappedKeyColors[controller.selectedColor.value]!),
           size: Size(screenSize.width, globalHeight),
         );
@@ -98,7 +98,7 @@ class BaseKeyPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return true;
+  bool shouldRepaint(BaseKeyPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.keys != keys;
   }
 }
