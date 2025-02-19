@@ -1,14 +1,11 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:get/get.dart';
-import 'package:lightguide/Alert/StandartAlertDialog.dart';
 import 'package:lightguide/Models/hardware_device.dart';
 import 'package:lightguide/Models/collection_scale.dart';
 import 'package:lightguide/Models/controller_Properties.dart';
 import 'package:lightguide/Mappings/mappings_note_scales.dart';
 import 'package:lightguide/Models/pianokeys.dart';
 import 'package:music_notes/music_notes.dart';
-import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class MainViewModel extends GetxController {
   var connectedToDevice = false.obs;
@@ -44,19 +41,17 @@ class MainViewModel extends GetxController {
   Future<void> connectDevice() async {
     try {
       hardwareDevice = HardwareDevice(controllerProperties);
-      final result = await hardwareDevice?.connectDevice() ?? false;
+      final result = await hardwareDevice.connectDevice();
       connectedToDevice.value = result;
     } catch (e) {
       connectedToDevice.value = false;
       print("Error connecting to device: $e");
-      // showErrorDialog("Connection Error", "Failed to connect to the device. Please try again.");
     }
   }
 
-  Future<bool> disconnectDevice() async {
-    final r = await hardwareDevice?.disconnectDevice();
-    connectedToDevice.value = !(r ?? false);
-    return r ?? false;
+  Future<void> disconnectDevice() async {
+    final result = await hardwareDevice.disconnectDevice();
+    connectedToDevice.value = result;
   }
 
   void updateDeviceAndView() async {
@@ -74,8 +69,8 @@ class MainViewModel extends GetxController {
 
         print("root note ${rootNote}");
         print("Scale ${scaled.toString()}");
-        if (hardwareDevice != null) {
-          await hardwareDevice!.sendFullReport(collectionScale.value
+        if (hardwareDevice.isOpen) {
+          await hardwareDevice.sendFullReport(collectionScale.value
               .allKeyToBytes(colIn: mappedKeyColors[selectedColor.value]!));
         }
       }

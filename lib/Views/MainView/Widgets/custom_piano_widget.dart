@@ -43,6 +43,8 @@ class BaseKeyPainter extends CustomPainter {
     required this.color,
     required this.keys,
   });
+
+
   @override
   void paint(Canvas canvas, Size size) {
     var black = keys.where((element) => element.isFlat()).toList();
@@ -57,6 +59,27 @@ class BaseKeyPainter extends CustomPainter {
               width: singleKeywidth,
               height: singleKeyHeight),
           Paint()..color = Colors.white);
+
+      TextPainter textPainter;
+      textPainter = TextPainter(
+        text: TextSpan(
+          text: key.noteName.toString(),
+          style: TextStyle(
+            color: Colors.yellow,
+            fontSize: 12,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout(
+        minWidth: 0,
+        maxWidth: singleKeywidth,
+      );
+      textPainter.paint(
+        canvas,
+        Offset(currentPos - (singleKeywidth / 2), singleKeyHeight / 2),
+      );
+      
 
       if (key.isActive) {
         canvas.drawRect(
@@ -74,25 +97,45 @@ class BaseKeyPainter extends CustomPainter {
 
     for (var key in black) {
       canvas.drawRect(
-          Rect.fromCenter(
-              center: Offset(currentPos, (singleKeyHeight / 8) * -1),
-              width: singleKeywidth * 0.5,
-              height: singleKeyHeight * 0.8),
-          Paint()..color = Colors.grey);
+        Rect.fromCenter(
+          center: Offset(currentPos, (singleKeyHeight / 8) * -1),
+          width: singleKeywidth * 0.5,
+          height: singleKeyHeight * 0.8),
+        Paint()..color = Colors.grey);
 
-      if (black.elementAt(1) == key) {
-        currentPos = currentPos + (singleKeywidth * 0.5) * 2;
+      TextPainter textPainter;
+      textPainter = TextPainter(
+      text: TextSpan(
+        text: key.noteName.toString(),
+        style: TextStyle(
+        color: Colors.yellow,
+        fontSize: 12,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      );
+      textPainter.layout(
+      minWidth: 0,
+      maxWidth: singleKeywidth * 0.5,
+      );
+      textPainter.paint(
+      canvas,
+      Offset(currentPos - (singleKeywidth * 0.25), (singleKeyHeight * 0.4) * -1),
+      );
+
+      if (black.length > 1 && black.elementAt(1) == key) {
+      currentPos = currentPos + (singleKeywidth * 0.5) * 2;
       }
       currentPos =
-          currentPos + ((singleKeywidth * 0.5) * 2) + paddingbetweenKeys;
+        currentPos + ((singleKeywidth * 0.5) * 2) + paddingbetweenKeys;
 
       if (key.isActive) {
-        canvas.drawRect(
-            Rect.fromCenter(
-                center: Offset(currentPos, 0),
-                width: singleKeywidth * 0.4,
-                height: singleKeyHeight * 0.8),
-            Paint()..color = color);
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(currentPos, 0),
+          width: singleKeywidth * 0.4,
+          height: singleKeyHeight * 0.8),
+        Paint()..color = color);
       }
     }
   }

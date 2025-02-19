@@ -1,7 +1,5 @@
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
-import 'package:lightguide/Mappings/mappings_note_scales.dart';
-import 'package:lightguide/Models/app_settings.dart';
 import 'package:lightguide/Views/MainView/Widgets/custom_piano_widget.dart';
 import 'package:lightguide/ViewModel.dart';
 import 'package:lightguide/Views/MainView/Widgets/RootNotePicker.dart';
