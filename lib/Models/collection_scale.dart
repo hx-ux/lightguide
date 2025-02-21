@@ -12,9 +12,8 @@ class CollectionScale {
   List<int> activeKeys = [];
 
   CollectionScale(this.controllerproperties);
-  bool isControllerConnected = false;
 
-  List<Pianokeys> toOctave() {
+  List<Pianokeys> intKeysToNotes() {
     List<Pianokeys> p = [];
     for (int i = 0; i <= 11; i++) {
       p.add(Pianokeys.singlePianoKey(
@@ -26,7 +25,7 @@ class CollectionScale {
   }
 
   Uint8List allKeyToBytes({Color colIn = Colors.blue}) {
-    var temp = toOctave();
+    var temp = intKeysToNotes();
 
     int multiplyBy = (controllerproperties.keysCount / 11).ceil();
     for (int i = 0; i < multiplyBy; i++) {
@@ -44,14 +43,12 @@ class CollectionScale {
     return toSendBytes.toBytes();
   }
 
-    List<int> setNotesByScale(List<Note> primaryList) {
+  void setNotesByScale(List<Note> primaryList) {
     var cuttedScale = List.from(primaryList)..removeLast();
     List<int> d = [];
     for (var element in cuttedScale) {
       d.add(getIndexByNote(element));
     }
     activeKeys = d;
-    return d;
   }
-
 }

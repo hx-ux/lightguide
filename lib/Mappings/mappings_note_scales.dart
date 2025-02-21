@@ -16,6 +16,8 @@ Map<int, Note> mappedRootNotes = {
   11: Note.b,
 };
 
+final guiRootNotes = mappedRootNotes.values.toString();
+
 Map<String, ScalePattern> mappedScales = {
   "major": ScalePattern.major,
   "minor": ScalePattern.naturalMinor,
