@@ -4,14 +4,13 @@ import 'package:lightguide/Controller/MainController.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class DeviceSelector extends StatefulWidget {
-  MainViewController get viewModel => Get.find();
-  const DeviceSelector({
+  var controller = Get.put(MainViewController());
+  DeviceSelector({
     super.key,
   });
 
   @override
-  State<DeviceSelector> createState() =>
-      _DeviceSelectorState();
+  State<DeviceSelector> createState() => _DeviceSelectorState();
 }
 
 class _DeviceSelectorState extends State<DeviceSelector> {
@@ -30,9 +29,9 @@ class _DeviceSelectorState extends State<DeviceSelector> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RadioGroup<int>(
-              value: widget.viewModel.selectedDevice.value,
+              value: widget.controller.selectedDevice.value,
               onChanged: (value) =>
-                  widget.viewModel.selectedDevice.value = value,
+                  widget.controller.selectedDevice.value = value,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -45,7 +44,6 @@ class _DeviceSelectorState extends State<DeviceSelector> {
             ),
           ],
         ),
-        // AutoConnectOnStartCheckbox(widget: widget).paddingOnly(top: 20),
       ],
     ));
   }

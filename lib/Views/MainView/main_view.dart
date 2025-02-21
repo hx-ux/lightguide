@@ -5,7 +5,7 @@ import 'package:lightguide/Controller/MainController.dart';
 import 'package:lightguide/Views/MainView/Widgets/RootNotePicker.dart';
 import 'package:lightguide/Views/MainView/Widgets/color_picker.dart';
 import 'package:lightguide/Views/MainView/Widgets/scale_picker.dart';
-import 'package:lightguide/Views/SettingsView/Widgets/connection_bade.dart';
+import 'package:lightguide/Views/MainView/Widgets/connection_bade.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class MainView extends StatelessWidget {

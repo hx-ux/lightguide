@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lightguide/Models/app_settings.dart';
 import 'package:lightguide/Theme/Theme.dart';
 import 'package:lightguide/Views/MainView/main_view.dart';
+import 'package:lightguide/Views/SettingsView/SettingsView.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 ThemeData? theme = themes['dark']!;
