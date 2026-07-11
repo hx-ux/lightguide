@@ -56,6 +56,8 @@ impl TargetDevice {
         const STARTUP: [u8; 3] = [0xa0, 0x00, 0x00];
         let _ = device.write(&STARTUP);
         self.device = Some(device);
+        // Auto Highlight scale on startup
+        self.highlight_scale()?;
         Ok(())
     }
 
@@ -64,8 +66,6 @@ impl TargetDevice {
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
         device.write(&report)?;
-        // Auto Highlight scale on startup
-        self.highlight_scale()?;
         Ok(())
     }
 
@@ -103,8 +103,10 @@ impl TargetDevice {
             Some(s) => {
                 let mut report = vec![0u8; self.report_size];
                 report[0] = self.key_leds_adress;
-                let allowed_keys: Vec<u8> =
-                    s.into_iter().map(|ss| self.key_to_position(ss)).collect();
+                let allowed_keys: Vec<u8> = s
+                    .into_iter()
+                    .map(|single| self.key_to_position(single))
+                    .collect();
 
                 for key in 0..self.keys {
                     let pitch_class = (key % 12) as u8;

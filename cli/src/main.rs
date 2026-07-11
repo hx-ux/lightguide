@@ -1,17 +1,6 @@
+use backend::{keycolor::KeyColor, targetdevice::TargetDevice};
 use clap::{Parser, Subcommand};
-use std::error::Error;
-use std::thread;
-use std::time::Duration;
-
-use crate::keycolor::KeyColor;
-use crate::targetdevice::TargetDevice;
-mod keycolor;
-mod targetdevice;
-const VENDOR_ID: u16 = 0x17cc;
-const PRODUCT_ID: u16 = 0x1350;
-const LED_ADRESS: u8 = 0x82; // MK1 LED report (0x81 for MK2)
-const REPORT_SIZE: usize = 250;
-const NUM_KEYS: usize = 49;
+use std::{error::Error, thread, time::Duration};
 
 #[derive(Parser)]
 #[command(
@@ -29,10 +18,8 @@ enum Commands {
     Off,
     /// Highlight a musical scale on the keyboard
     Scale {
-        /// Root note name, e.g. c, d, f#
         #[arg(default_value = "C")]
         root: String,
-        /// Scale name, e.g. major, minor
         #[arg(default_value = "Ionian")]
         scale: String,
     },
@@ -46,16 +33,15 @@ enum Commands {
     Automatic {},
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+pub fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
-
     let mut tg = TargetDevice::new(
         "kontrol49mk1".to_string(),
-        NUM_KEYS,
-        REPORT_SIZE,
-        LED_ADRESS,
-        VENDOR_ID,
-        PRODUCT_ID,
+        49,
+        250,
+        0x82,
+        0x17cc,
+        0x1350,
         KeyColor::new(255, 0, 0),
         KeyColor::new(0, 0, 0),
         KeyColor::new(0, 100, 0),
