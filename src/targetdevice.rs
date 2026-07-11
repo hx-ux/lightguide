@@ -1,4 +1,5 @@
 use crate::keycolor::KeyColor;
+use harmonia::{Note, PitchClass, Scale};
 use hidapi::HidDevice;
 use std::error::Error;
 
@@ -13,6 +14,7 @@ pub struct TargetDevice {
     pub keys_dim_color: KeyColor,
     pub response_color: KeyColor,
     device: Option<HidDevice>,
+    scale: Scale,
 }
 
 impl TargetDevice {
@@ -38,6 +40,7 @@ impl TargetDevice {
             keys_dim_color,
             response_color,
             device: None,
+            scale: Scale::new(PitchClass::C, harmonia::ScaleKind::Ionian),
         }
     }
 
@@ -61,35 +64,66 @@ impl TargetDevice {
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
         device.write(&report)?;
+        // Auto Highlight scale on startup
+        self.highlight_scale()?;
         Ok(())
     }
 
-    pub fn highlight_scale(
-        &self,
-        root: &str,
-        name: &str,
-        on_color: KeyColor,
-        off_color: KeyColor,
-    ) -> Result<(), Box<dyn Error>> {
+    fn key_to_position(&self, note: Note) -> u8 {
+        let basekey = match note.letter {
+            harmonia::Letter::C => 0,
+            harmonia::Letter::D => 2,
+            harmonia::Letter::E => 4,
+            harmonia::Letter::F => 5,
+            harmonia::Letter::G => 7,
+            harmonia::Letter::A => 9,
+            harmonia::Letter::B => 11,
+        };
+
+        let g = basekey + note.accidental.offset() as u8;
+        g
+    }
+
+    pub fn set_scale_string(&mut self, scale: String) -> Result<(), Box<dyn Error>> {
+        let g_major: Scale = scale.parse().unwrap();
+        self.scale = g_major;
+        self.highlight_scale()?;
+        Ok(())
+    }
+
+    pub fn set_scale(&mut self, scale: Scale) {
+        self.scale = scale;
+        let _ = self.highlight_scale();
+    }
+
+    fn highlight_scale(&self) -> Result<(), Box<dyn Error>> {
         let device = self.device.as_ref().ok_or("device not connected")?;
 
-        let root = root_semitone(root).ok_or("unknown root note")?;
-        let intervals = scale_intervals(name).ok_or("unknown scale name")?;
+        match self.scale.spelled() {
+            Some(s) => {
+                let mut report = vec![0u8; self.report_size];
+                report[0] = self.key_leds_adress;
+                let allowed_keys: Vec<u8> =
+                    s.into_iter().map(|ss| self.key_to_position(ss)).collect();
 
-        let mut report = vec![0u8; self.report_size];
-        report[0] = self.key_leds_adress;
+                for key in 0..self.keys {
+                    let pitch_class = (key % 12) as u8;
+                    let in_scale = allowed_keys.contains(&pitch_class);
+                    set_key_color(
+                        &mut report,
+                        key,
+                        if in_scale {
+                            self.keys_hightlight_color
+                        } else {
+                            self.keys_dim_color
+                        },
+                    );
+                }
 
-        for key in 0..self.keys {
-            let semitone = (key + root) % 12;
-            let in_scale = intervals.iter().any(|&iv| (iv + root) % 12 == semitone);
-            set_key_color(
-                &mut report,
-                key,
-                if in_scale { on_color } else { off_color },
-            );
+                device.write(&report)?;
+            }
+            None => todo!(),
         }
-
-        device.write(&report)?;
         Ok(())
     }
 
@@ -99,7 +133,7 @@ impl TargetDevice {
         match device.read_timeout(&mut buf, 100) {
             Ok(0) => {}
             Ok(_) => {
-                println!("RAW {:02X?}", &buf[0..16]);
+                // println!("RAW {:02X?}", &buf[0..16]);
                 match buf[0] {
                     0x01 => {
                         let note = buf[1];
@@ -136,33 +170,5 @@ fn set_key_color(report: &mut [u8], key: usize, color: KeyColor) {
     let offset = 1 + key * 3;
     if offset + 3 <= report.len() {
         report[offset..offset + 3].copy_from_slice(&color.to_bytes());
-    }
-}
-
-fn scale_intervals(name: &str) -> Option<[usize; 7]> {
-    match name.to_lowercase().as_str() {
-        "major" => Some([0, 2, 4, 5, 7, 9, 11]),
-        "minor" => Some([0, 2, 3, 5, 7, 8, 10]),
-        "dorian" => Some([0, 2, 3, 5, 7, 9, 10]),
-        "penta" | "pentatonic" => Some([0, 2, 4, 7, 9, 0, 0]),
-        _ => None,
-    }
-}
-
-fn root_semitone(root: &str) -> Option<usize> {
-    match root.to_lowercase().as_str() {
-        "c" => Some(0),
-        "c#" | "db" => Some(1),
-        "d" => Some(2),
-        "d#" | "eb" => Some(3),
-        "e" => Some(4),
-        "f" => Some(5),
-        "f#" | "gb" => Some(6),
-        "g" => Some(7),
-        "g#" | "ab" => Some(8),
-        "a" => Some(9),
-        "a#" | "bb" => Some(10),
-        "b" => Some(11),
-        _ => None,
     }
 }

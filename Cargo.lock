@@ -121,6 +121,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
+name = "harmonia"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c9404c815d9fbe7210f873b198af921f67947926f9efc1b8c9a00ba6ec49366"
+
+[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -156,6 +162,7 @@ name = "lightguide_rust"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "harmonia",
  "hidapi",
 ]
 

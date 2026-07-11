@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 hidapi = "2.6.6"
 clap = { version = "4", features = ["derive"] }
+harmonia = "0.1.0"
 
 # [workspace]
 # members = ["lightguide_web"]

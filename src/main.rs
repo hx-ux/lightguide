@@ -30,11 +30,11 @@ enum Commands {
     /// Highlight a musical scale on the keyboard
     Scale {
         /// Root note name, e.g. c, d, f#
-        #[arg(default_value = "c")]
+        #[arg(default_value = "C")]
         root: String,
         /// Scale name, e.g. major, minor
-        #[arg(default_value = "major")]
-        name: String,
+        #[arg(default_value = "Ionian")]
+        scale: String,
     },
     /// Poll the device and print raw input reports (keys, sliders, pitch, mod)
     Listen {
@@ -69,13 +69,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             tg.notes_off()?;
             println!("ok: lights off");
         }
-        Commands::Scale { root, name } => {
+        Commands::Scale { root, scale } => {
             tg.notes_off()?;
-            let on_color = KeyColor::new(255, 0, 0);
-            let off_color = KeyColor::new(0, 0, 0);
-
-            tg.highlight_scale(&root, &name, on_color, off_color)?;
-            println!("ok: scale {root} {name}");
+            let concat = format!("{} {}", root.trim().to_uppercase(), scale.trim());
+            tg.set_scale_string(concat)?;
         }
         Commands::Listen { count } => {
             let mut n = 0;
@@ -88,7 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 thread::sleep(Duration::from_millis(10));
             }
         }
-        Commands::Automatic {} => todo!(),
+        Commands::Automatic {} => {}
     }
     Ok(())
 }
