@@ -1,5 +1,5 @@
 use crate::keycolor::KeyColor;
-use harmonia::{Note, PitchClass, Scale};
+use harmonia::{Note, PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
 use std::error::Error;
 
@@ -14,7 +14,9 @@ pub struct TargetDevice {
     pub keys_dim_color: KeyColor,
     pub response_color: KeyColor,
     device: Option<HidDevice>,
-    scale: Scale,
+    // pub scale: Scale,
+    pub root: PitchClass,
+    pub scale: ScaleKind,
 }
 
 impl TargetDevice {
@@ -40,7 +42,8 @@ impl TargetDevice {
             keys_dim_color,
             response_color,
             device: None,
-            scale: Scale::new(PitchClass::C, harmonia::ScaleKind::Ionian),
+            root: PitchClass::C,
+            scale: ScaleKind::Ionian,
         }
     }
 
@@ -57,7 +60,6 @@ impl TargetDevice {
         let _ = device.write(&STARTUP);
         self.device = Some(device);
         // Auto Highlight scale on startup
-        self.highlight_scale()?;
         Ok(())
     }
 
@@ -85,13 +87,31 @@ impl TargetDevice {
     }
 
     pub fn set_scale_string(&mut self, scale: String) -> Result<(), Box<dyn Error>> {
-        let g_major: Scale = scale.parse().unwrap();
-        self.scale = g_major;
+        let scale: Scale = scale.parse().unwrap();
+        self.root = scale.root;
+        self.scale = scale.kind;
         self.highlight_scale()?;
         Ok(())
     }
 
-    pub fn set_scale(&mut self, scale: Scale) {
+    pub fn set_scale_collection(&mut self, scale: Scale) {
+        self.root = scale.root;
+        self.scale = scale.kind;
+        let _ = self.highlight_scale();
+    }
+
+    pub fn set_scale(&mut self, root: PitchClass, scale: ScaleKind) {
+        self.root = root;
+        self.scale = scale;
+        let _ = self.highlight_scale();
+    }
+
+    pub fn set_root(&mut self, root: PitchClass) {
+        self.root = root;
+        let _ = self.highlight_scale();
+    }
+
+    pub fn set_scale_kind(&mut self, scale: ScaleKind) {
         self.scale = scale;
         let _ = self.highlight_scale();
     }
@@ -99,7 +119,9 @@ impl TargetDevice {
     fn highlight_scale(&self) -> Result<(), Box<dyn Error>> {
         let device = self.device.as_ref().ok_or("device not connected")?;
 
-        match self.scale.spelled() {
+        let f = Scale::new(self.root, self.scale);
+
+        match f.spelled() {
             Some(s) => {
                 let mut report = vec![0u8; self.report_size];
                 report[0] = self.key_leds_adress;
