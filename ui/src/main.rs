@@ -1,11 +1,9 @@
-use std::clone;
-
 use backend::{
     keycolor::KeyColor,
     targetdevice::TargetDevice,
     utils::{HarmoniaUtils, KeyboardKey, KeyboardKeysType},
 };
-use harmonia::{PitchClass, Scale, ScaleKind};
+use harmonia::{PitchClass, ScaleKind};
 
 fn main() -> eframe::Result {
     env_logger::init();
