@@ -1,0 +1,15 @@
+name = "lightguide_rust"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [
+    "backend",
+    "cli",
+    "ui"
+]
+
+
+[workspace.dependencies]
+harmonia = "0.1.0"
+hidapi = "2.6.6"
