@@ -1,5 +1,8 @@
-use crate::keycolor::KeyColor;
-use harmonia::{Note, PitchClass, Scale, ScaleKind};
+use crate::{
+    keycolor::KeyColor,
+    utils::{KeyboardKey, KeyboardKeysType},
+};
+use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
 use std::error::Error;
 
@@ -14,8 +17,7 @@ pub struct TargetDevice {
     pub keys_dim_color: KeyColor,
     pub response_color: KeyColor,
     device: Option<HidDevice>,
-    // pub scale: Scale,
-    pub root: PitchClass,
+    pub root_note: PitchClass,
     pub scale: ScaleKind,
 }
 
@@ -42,7 +44,7 @@ impl TargetDevice {
             keys_dim_color,
             response_color,
             device: None,
-            root: PitchClass::C,
+            root_note: PitchClass::C,
             scale: ScaleKind::Ionian,
         }
     }
@@ -71,43 +73,28 @@ impl TargetDevice {
         Ok(())
     }
 
-    fn key_to_position(&self, note: Note) -> u8 {
-        let basekey = match note.letter {
-            harmonia::Letter::C => 0,
-            harmonia::Letter::D => 2,
-            harmonia::Letter::E => 4,
-            harmonia::Letter::F => 5,
-            harmonia::Letter::G => 7,
-            harmonia::Letter::A => 9,
-            harmonia::Letter::B => 11,
-        };
-
-        let g = basekey + note.accidental.offset() as u8;
-        g
-    }
-
     pub fn set_scale_string(&mut self, scale: String) -> Result<(), Box<dyn Error>> {
         let scale: Scale = scale.parse().unwrap();
-        self.root = scale.root;
+        self.root_note = scale.root;
         self.scale = scale.kind;
         self.highlight_scale()?;
         Ok(())
     }
 
     pub fn set_scale_collection(&mut self, scale: Scale) {
-        self.root = scale.root;
+        self.root_note = scale.root;
         self.scale = scale.kind;
         let _ = self.highlight_scale();
     }
 
     pub fn set_scale(&mut self, root: PitchClass, scale: ScaleKind) {
-        self.root = root;
+        self.root_note = root;
         self.scale = scale;
         let _ = self.highlight_scale();
     }
 
     pub fn set_root(&mut self, root: PitchClass) {
-        self.root = root;
+        self.root_note = root;
         let _ = self.highlight_scale();
     }
 
@@ -116,38 +103,44 @@ impl TargetDevice {
         let _ = self.highlight_scale();
     }
 
+    pub fn keyboard_keys(&self) -> Vec<KeyboardKey> {
+        let mut h: Vec<KeyboardKey> = vec![];
+        let build_scale = Scale::new(self.root_note, self.scale);
+        for pos in 0..self.keys {
+            let pitch_class = (pos % 12) as u8;
+            let pc = PitchClass::new(pitch_class);
+            h.push(KeyboardKey::new(
+                pos,
+                if (|pc: u8| matches!(pc, 1 | 3 | 6 | 8 | 10))(pitch_class) {
+                    KeyboardKeysType::Black
+                } else {
+                    KeyboardKeysType::White
+                },
+                pc.to_string(),
+                build_scale.contains(pc),
+            ));
+        }
+        h
+    }
+
     fn highlight_scale(&self) -> Result<(), Box<dyn Error>> {
         let device = self.device.as_ref().ok_or("device not connected")?;
+        let kk = self.keyboard_keys();
+        let mut report = vec![0u8; self.report_size];
+        report[0] = self.key_leds_adress;
 
-        let f = Scale::new(self.root, self.scale);
-
-        match f.spelled() {
-            Some(s) => {
-                let mut report = vec![0u8; self.report_size];
-                report[0] = self.key_leds_adress;
-                let allowed_keys: Vec<u8> = s
-                    .into_iter()
-                    .map(|single| self.key_to_position(single))
-                    .collect();
-
-                for key in 0..self.keys {
-                    let pitch_class = (key % 12) as u8;
-                    let in_scale = allowed_keys.contains(&pitch_class);
-                    set_key_color(
-                        &mut report,
-                        key,
-                        if in_scale {
-                            self.keys_hightlight_color
-                        } else {
-                            self.keys_dim_color
-                        },
-                    );
-                }
-
-                device.write(&report)?;
-            }
-            None => todo!(),
+        for pos in kk {
+            set_key_color(
+                &mut report,
+                pos.position,
+                if pos.active {
+                    self.keys_hightlight_color
+                } else {
+                    self.keys_dim_color
+                },
+            );
         }
+        device.write(&report)?;
         Ok(())
     }
 
