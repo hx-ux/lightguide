@@ -15,7 +15,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "LightGuide",
         options,
-        Box::new(|cc| Ok(Box::<MyApp>::default())),
+        Box::new(|_cc| Ok(Box::<MyApp>::default())),
     )
 }
 
@@ -122,7 +122,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
     let height = 100.0;
     let black_h = height * 0.62;
 
-    let (rect, painter) = ui.allocate_painter(egui::vec2(available, height), egui::Sense::hover());
+    let (_, painter) = ui.allocate_painter(egui::vec2(available, height), egui::Sense::hover());
 
     let to_color = |c: KeyColor| egui::Color32::from_rgb(c.r, c.g, c.b);
     let stroke = egui::Stroke::new(1.0, egui::Color32::BLACK);

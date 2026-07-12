@@ -1,4 +1,4 @@
-use harmonia::{Note, PitchClass};
+use harmonia::PitchClass;
 #[derive(PartialEq, Eq, Clone)]
 pub enum KeyboardKeyType {
     White,
