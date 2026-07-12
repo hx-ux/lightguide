@@ -29,17 +29,16 @@ impl KeyboardKey {
         }
     }
 
-    pub fn from_note(pitch: PitchClass, position: usize) -> Self {
-        let j = if (|pc: u8| matches!(pc, 1 | 3 | 6 | 8 | 10))(pitch.value()) {
-            KeyboardKeyType::Black
-        } else {
-            KeyboardKeyType::White
-        };
+    pub fn from_note(pitch: PitchClass, position: usize, active: bool) -> Self {
         Self {
             position,
-            ktype: j,
+            ktype: if (|pc: u8| matches!(pc, 1 | 3 | 6 | 8 | 10))(pitch.value()) {
+                KeyboardKeyType::Black
+            } else {
+                KeyboardKeyType::White
+            },
             display_name: HarmoniaUtils::normalize_pitch_names(&pitch),
-            active: false,
+            active,
         }
     }
 }

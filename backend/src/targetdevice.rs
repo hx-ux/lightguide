@@ -1,7 +1,4 @@
-use crate::{
-    keycolor::KeyColor,
-    utils::{KeyboardKey, KeyboardKeyType},
-};
+use crate::{keycolor::KeyColor, utils::KeyboardKey};
 use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
 use std::error::Error;
@@ -104,36 +101,26 @@ impl TargetDevice {
     }
 
     pub fn keyboard_keys(&self) -> Vec<KeyboardKey> {
-        let mut h: Vec<KeyboardKey> = vec![];
         let build_scale = Scale::new(self.root_note, self.scale);
-        for pos in 0..self.keys {
-            let pitch_class = (pos % 12) as u8;
-            let pc = PitchClass::new(pitch_class);
-            h.push(KeyboardKey::new(
-                pos,
-                if (|pc: u8| matches!(pc, 1 | 3 | 6 | 8 | 10))(pitch_class) {
-                    KeyboardKeyType::Black
-                } else {
-                    KeyboardKeyType::White
-                },
-                pc.to_string(),
-                build_scale.contains(pc),
-            ));
-        }
-        h
+        (0..self.keys)
+            .map(|pos| {
+                let pc = PitchClass::new((pos % 12) as u8);
+                KeyboardKey::from_note(pc, pos, build_scale.contains(pc))
+            })
+            .collect()
     }
 
     fn highlight_scale(&self) -> Result<(), Box<dyn Error>> {
         let device = self.device.as_ref().ok_or("device not connected")?;
-        let kk = self.keyboard_keys();
+        let keys = self.keyboard_keys();
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
 
-        for pos in kk {
+        for key in keys {
             set_key_color(
                 &mut report,
-                pos.position,
-                if pos.active {
+                key.position,
+                if key.active {
                     self.keys_hightlight_color
                 } else {
                     self.keys_dim_color
