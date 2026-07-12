@@ -24,7 +24,6 @@ struct MyApp {
     is_connected: bool,
     sel_pitch: PitchClass,
     sel_scale: ScaleKind,
-    sel_hightlight_color: egui::Color32,
 }
 
 impl Default for MyApp {
@@ -46,7 +45,6 @@ impl Default for MyApp {
             is_connected: false,
             sel_pitch: PitchClass::C,
             sel_scale: ScaleKind::Ionian,
-            sel_hightlight_color: egui::Color32::RED,
         }
     }
 }
@@ -56,8 +54,6 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.heading("Lightguide");
             ui.heading(self.is_connected.to_string());
-
-            // ui.color_edit_button_srgba(&mut self.sel_hightlight_color);
 
             egui::ComboBox::from_label("Root")
                 .selected_text(HarmoniaUtils::normalize_pitch_names(&self.sel_pitch))
@@ -105,8 +101,6 @@ impl eframe::App for MyApp {
             draw_keyboard(
                 ui,
                 self.device.keyboard_keys(),
-                // self.sel_pitch,
-                // self.d,
                 self.device.keys_hightlight_color,
             );
         });
