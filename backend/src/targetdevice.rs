@@ -1,6 +1,6 @@
 use crate::{
     keycolor::KeyColor,
-    utils::{KeyboardKey, KeyboardKeysType},
+    utils::{KeyboardKey, KeyboardKeyType},
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
@@ -112,9 +112,9 @@ impl TargetDevice {
             h.push(KeyboardKey::new(
                 pos,
                 if (|pc: u8| matches!(pc, 1 | 3 | 6 | 8 | 10))(pitch_class) {
-                    KeyboardKeysType::Black
+                    KeyboardKeyType::Black
                 } else {
-                    KeyboardKeysType::White
+                    KeyboardKeyType::White
                 },
                 pc.to_string(),
                 build_scale.contains(pc),

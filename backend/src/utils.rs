@@ -1,6 +1,6 @@
-use harmonia::PitchClass;
+use harmonia::{Note, PitchClass};
 #[derive(PartialEq, Eq, Clone)]
-pub enum KeyboardKeysType {
+pub enum KeyboardKeyType {
     White,
     Black,
 }
@@ -9,7 +9,7 @@ pub enum KeyboardKeysType {
 
 pub struct KeyboardKey {
     pub position: usize,
-    pub ktype: KeyboardKeysType,
+    pub ktype: KeyboardKeyType,
     pub display_name: String,
     pub active: bool,
 }
@@ -17,7 +17,7 @@ pub struct KeyboardKey {
 impl KeyboardKey {
     pub fn new(
         position: usize,
-        ktype: KeyboardKeysType,
+        ktype: KeyboardKeyType,
         display_name: String,
         active: bool,
     ) -> Self {
@@ -26,6 +26,20 @@ impl KeyboardKey {
             ktype,
             display_name,
             active,
+        }
+    }
+
+    pub fn from_note(pitch: PitchClass, position: usize) -> Self {
+        let j = if (|pc: u8| matches!(pc, 1 | 3 | 6 | 8 | 10))(pitch.value()) {
+            KeyboardKeyType::Black
+        } else {
+            KeyboardKeyType::White
+        };
+        Self {
+            position,
+            ktype: j,
+            display_name: HarmoniaUtils::normalize_pitch_names(&pitch),
+            active: false,
         }
     }
 }

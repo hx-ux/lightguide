@@ -1,7 +1,7 @@
 use backend::{
     keycolor::KeyColor,
     targetdevice::TargetDevice,
-    utils::{HarmoniaUtils, KeyboardKey, KeyboardKeysType},
+    utils::{HarmoniaUtils, KeyboardKey, KeyboardKeyType},
 };
 use harmonia::{PitchClass, ScaleKind};
 
@@ -77,6 +77,9 @@ impl eframe::App for MyApp {
                     Ok(_) => {
                         self.is_connected = true;
                         let _ = self.device.notes_off();
+                        let _ = self
+                            .device
+                            .set_scale(self.sel_pitch.clone(), self.sel_scale.clone());
                     }
                     Err(_) => {}
                 }
@@ -113,7 +116,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
         / keys
             .clone()
             .into_iter()
-            .filter(|x| x.ktype == KeyboardKeysType::White)
+            .filter(|x| x.ktype == KeyboardKeyType::White)
             .count() as f32;
     let black_w = white_w * 0.6;
     let height = 100.0;
@@ -127,7 +130,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
     let mut white_index: u8 = 0;
 
     for i in keys.clone() {
-        if i.ktype == KeyboardKeysType::Black {
+        if i.ktype == KeyboardKeyType::Black {
             continue;
         }
         let x = white_index as f32 * white_w;
@@ -168,7 +171,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
     // black keys
     let mut white_index = 0;
     for i in keys.clone() {
-        if i.ktype == KeyboardKeysType::Black {
+        if i.ktype == KeyboardKeyType::Black {
             let x = white_index as f32 * white_w - black_w / 2.0;
             let outer_rect =
                 egui::Rect::from_min_size(egui::pos2(x, 100.00), egui::vec2(black_w, black_h));
