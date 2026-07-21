@@ -6,7 +6,8 @@ edition = "2021"
 members = [
     "backend",
     "cli",
-    "ui"
+    "ui",
+    "rest"
 ]
 
 
