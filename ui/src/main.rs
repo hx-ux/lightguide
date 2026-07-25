@@ -48,7 +48,7 @@ impl Default for LightGuideApp {
             sel_pitch: PitchClass::C,
             sel_scale: ScaleKind::Ionian,
             messages: Vec::new(),
-            show_log: false,
+            show_log: true,
         }
     }
 }
@@ -64,11 +64,26 @@ impl eframe::App for LightGuideApp {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.heading(format!("Lightguide {}", self.device.name));
 
-            // All controls in one horizontal row
             ui.horizontal(|ui| {
-                // Connection status icon
-                let icon = if self.is_connected { "Y" } else { "N" };
-                ui.label(icon);
+                let c_text = if self.is_connected {
+                    "Connected"
+                } else {
+                    "Connect"
+                };
+                // Connect button
+                if ui.button(c_text).highlight().clicked() {
+                    match self.device.open() {
+                        Ok(_) => {
+                            self.is_connected = true;
+                            let _ = self.device.notes_off();
+                            let _ = self.device.set_scale(self.sel_pitch, self.sel_scale);
+                            self.log_event("Connected".into(), MessageType::Success);
+                        }
+                        Err(err) => {
+                            self.log_event(err.to_string(), MessageType::Error);
+                        }
+                    }
+                }
 
                 // Root pitch selector
                 egui::ComboBox::from_label("Root")
@@ -83,25 +98,25 @@ impl eframe::App for LightGuideApp {
                         }
                     });
 
+                ui.horizontal(|ui| {
+                    ui.label("Highlight");
+                    let mut hc = egui::Color32::from_rgb(
+                        self.device.keys_hightlight_color.r,
+                        self.device.keys_hightlight_color.g,
+                        self.device.keys_hightlight_color.b,
+                    );
+                    if ui.color_edit_button_srgba(&mut hc).changed() {
+                        let _ = self.device.set_highlight_color(KeyColor {
+                            r: hc.r(),
+                            g: hc.g(),
+                            b: hc.b(),
+                        });
+                    }
+                });
+
                 if self.sel_pitch != self.device.root_note {
                     let _ = self.device.set_root(self.sel_pitch);
                 }
-
-                // Connect button
-                if ui.button("Connect").clicked() {
-                    match self.device.open() {
-                        Ok(_) => {
-                            self.is_connected = true;
-                            let _ = self.device.notes_off();
-                            let _ = self.device.set_scale(self.sel_pitch, self.sel_scale);
-                            self.log_event("Connected".into(), MessageType::Success);
-                        }
-                        Err(err) => {
-                            self.log_event(err.to_string(), MessageType::Error);
-                        }
-                    }
-                }
-            }
 
                 // Scale selector
                 egui::ComboBox::from_label("Scale")
