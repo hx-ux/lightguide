@@ -6,9 +6,13 @@ edition = "2021"
 members = [
     "backend",
     "cli",
-    "ui",
-    "rest"
+    "ui"
 ]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+readme = "README.md"
 
 
 [workspace.dependencies]

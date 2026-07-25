@@ -3,7 +3,19 @@ use backend::{
     targetdevice::TargetDevice,
     utils::{HarmoniaUtils, KeyboardKey, KeyboardKeyType},
 };
+use egui::ScrollArea;
 use harmonia::{PitchClass, ScaleKind};
+
+#[derive(Clone)]
+enum MessageType {
+    Success,
+    Error,
+}
+
+struct ConsoleMessage {
+    text: String,
+    msg_type: MessageType,
+}
 
 fn main() -> eframe::Result {
     env_logger::init();
@@ -15,45 +27,44 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "LightGuide",
         options,
-        Box::new(|_cc| Ok(Box::<MyApp>::default())),
+        Box::new(|_cc| Ok(Box::<LightGuideApp>::default())),
     )
 }
 
-struct MyApp {
+struct LightGuideApp {
     device: TargetDevice,
     is_connected: bool,
     sel_pitch: PitchClass,
     sel_scale: ScaleKind,
+    messages: Vec<ConsoleMessage>,
 }
 
-impl Default for MyApp {
+impl Default for LightGuideApp {
     fn default() -> Self {
-        let d = TargetDevice::new(
-            "kontrol49mk1".to_string(),
-            49,
-            250,
-            0x82,
-            0x17cc,
-            0x1350,
-            KeyColor::new(255, 0, 0),
-            KeyColor::new(0, 0, 0),
-            KeyColor::new(0, 100, 0),
-        );
-
         Self {
-            device: d,
+            device: TargetDevice::default(),
             is_connected: false,
             sel_pitch: PitchClass::C,
             sel_scale: ScaleKind::Ionian,
+            messages: Vec::new(),
         }
     }
 }
 
-impl eframe::App for MyApp {
+impl LightGuideApp {
+    pub fn log_event(&mut self, text: String, msg_type: MessageType) {
+        self.messages.push(ConsoleMessage {
+            text: text.to_string(),
+            msg_type,
+        });
+    }
+}
+
+impl eframe::App for LightGuideApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
-            ui.heading("Lightguide");
-            ui.heading(self.is_connected.to_string());
+            ui.heading(format!("Lightguide {}", self.device.name.clone()));
+            ui.heading(format!("connect {}", self.is_connected.to_string()));
 
             egui::ComboBox::from_label("Root")
                 .selected_text(HarmoniaUtils::normalize_pitch_names(&self.sel_pitch))
@@ -68,7 +79,7 @@ impl eframe::App for MyApp {
                 });
 
             if self.sel_pitch != self.device.root_note {
-                self.device.set_root(self.sel_pitch.clone());
+                let _ = self.device.set_root(self.sel_pitch.clone());
             }
 
             if ui.button("Connect").clicked() {
@@ -80,8 +91,11 @@ impl eframe::App for MyApp {
                         let _ = self
                             .device
                             .set_scale(self.sel_pitch.clone(), self.sel_scale.clone());
+                        self.log_event("Connected".to_string(), MessageType::Success);
                     }
-                    Err(_) => {}
+                    Err(err) => {
+                        self.log_event(err.to_string(), MessageType::Error);
+                    }
                 }
             }
 
@@ -98,7 +112,7 @@ impl eframe::App for MyApp {
                 });
 
             if self.sel_scale != self.device.scale {
-                self.device.set_scale_kind(self.sel_scale.clone());
+                let _ = self.device.set_scale_kind(self.sel_scale.clone());
             }
 
             draw_keyboard(
@@ -106,6 +120,19 @@ impl eframe::App for MyApp {
                 self.device.keyboard_keys(),
                 self.device.keys_hightlight_color,
             );
+
+            ScrollArea::vertical()
+                .max_height(200.0)
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    for msg in &self.messages {
+                        let color = match msg.msg_type {
+                            MessageType::Success => egui::Color32::LIGHT_GREEN,
+                            MessageType::Error => egui::Color32::LIGHT_RED,
+                        };
+                        ui.colored_label(color, &msg.text);
+                    }
+                });
         });
     }
 }
