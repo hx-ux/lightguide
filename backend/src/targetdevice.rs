@@ -3,6 +3,15 @@ use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
 use std::error::Error;
 
+#[derive(Debug)]
+pub enum KeyboardError {
+    CantConnectKeyboard(String),
+    CannotWriteData(String),
+    KeyboardNotConnected,
+    InvalidScale,
+    InvalidNote,
+}
+
 pub struct TargetDevice {
     pub name: String,
     pub keys: usize,
