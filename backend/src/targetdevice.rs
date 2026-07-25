@@ -1,7 +1,38 @@
 use crate::{keycolor::KeyColor, utils::KeyboardKey};
 use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
-use std::error::Error;
+use std::fmt;
+
+#[derive(Debug)]
+pub enum KeyboardError {
+    CantConnectKeyboard(String),
+    CannotWriteData(String),
+    KeyboardNotConnected,
+    InvalidScale,
+    InvalidNote,
+}
+
+impl fmt::Display for KeyboardError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            KeyboardError::CantConnectKeyboard(details) => {
+                write!(f, "Cannot connect to keyboard: {}", details)
+            }
+            KeyboardError::CannotWriteData(details) => {
+                write!(f, "Cannot write data to keyboard: {}", details)
+            }
+            KeyboardError::KeyboardNotConnected => {
+                write!(f, "Keyboard is not connected")
+            }
+            KeyboardError::InvalidScale => {
+                write!(f, "The provided scale is invalid")
+            }
+            KeyboardError::InvalidNote => {
+                write!(f, "The provided note is invalid")
+            }
+        }
+    }
+}
 
 pub struct TargetDevice {
     pub name: String,
@@ -16,6 +47,25 @@ pub struct TargetDevice {
     device: Option<HidDevice>,
     pub root_note: PitchClass,
     pub scale: ScaleKind,
+}
+
+impl Default for TargetDevice {
+    fn default() -> Self {
+        Self {
+            name: "kontrol49mk1".to_string(),
+            keys: 49,
+            report_size: 250,
+            key_leds_adress: 0x82,
+            vendor_id: 0x17cc,
+            product_id: 0x1350,
+            keys_hightlight_color: KeyColor::new(255, 0, 0),
+            keys_dim_color: KeyColor::new(0, 0, 0),
+            response_color: KeyColor::new(0, 100, 0),
+            device: None,
+            root_note: PitchClass::C,
+            scale: ScaleKind::Ionian,
+        }
+    }
 }
 
 impl TargetDevice {
@@ -52,52 +102,64 @@ impl TargetDevice {
     }
 
     /// Open the HID device and store the handle inside this struct.
-    pub fn open(&mut self) -> Result<(), Box<dyn Error>> {
-        let api = hidapi::HidApi::new()?;
-        let device = api.open(self.vendor_id, self.product_id)?;
+    pub fn open(&mut self) -> Result<(), KeyboardError> {
+        let api =
+            hidapi::HidApi::new().map_err(|e| KeyboardError::CantConnectKeyboard(e.to_string()))?;
+
+        let device = api
+            .open(self.vendor_id, self.product_id)
+            .map_err(|e| KeyboardError::CantConnectKeyboard(e.to_string()))?;
+
         const STARTUP: [u8; 3] = [0xa0, 0x00, 0x00];
-        let _ = device.write(&STARTUP);
+        device
+            .write(&STARTUP)
+            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
+
         self.device = Some(device);
-        // Auto Highlight scale on startup
         Ok(())
     }
 
-    pub fn notes_off(&self) -> Result<(), Box<dyn Error>> {
-        let device = self.device.as_ref().ok_or("device not connected")?;
+    pub fn notes_off(&self) -> Result<(), KeyboardError> {
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(KeyboardError::KeyboardNotConnected)?;
+
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
-        device.write(&report)?;
+        device
+            .write(&report)
+            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
         Ok(())
     }
 
-    pub fn set_scale_string(&mut self, scale: String) -> Result<(), Box<dyn Error>> {
-        let scale: Scale = scale.parse().unwrap();
-        self.root_note = scale.root;
-        self.scale = scale.kind;
+    pub fn set_scale_string(&mut self, scale: String) -> Result<(), KeyboardError> {
+        let s: Scale = scale.parse().map_err(|_| KeyboardError::InvalidScale)?;
+
+        //self.root_note = scale.root;
+        self.scale = s.kind;
+        self.highlight_scale()?;
+
+        Ok(())
+    }
+
+    pub fn set_scale(&mut self, root: PitchClass, scale: ScaleKind) -> Result<(), KeyboardError> {
+        self.root_note = root;
+        self.scale = scale;
         self.highlight_scale()?;
         Ok(())
     }
 
-    pub fn set_scale_collection(&mut self, scale: Scale) {
-        self.root_note = scale.root;
-        self.scale = scale.kind;
-        let _ = self.highlight_scale();
-    }
-
-    pub fn set_scale(&mut self, root: PitchClass, scale: ScaleKind) {
+    pub fn set_root(&mut self, root: PitchClass) -> Result<(), KeyboardError> {
         self.root_note = root;
-        self.scale = scale;
-        let _ = self.highlight_scale();
+        self.highlight_scale()?;
+        Ok(())
     }
 
-    pub fn set_root(&mut self, root: PitchClass) {
-        self.root_note = root;
-        let _ = self.highlight_scale();
-    }
-
-    pub fn set_scale_kind(&mut self, scale: ScaleKind) {
+    pub fn set_scale_kind(&mut self, scale: ScaleKind) -> Result<(), KeyboardError> {
         self.scale = scale;
-        let _ = self.highlight_scale();
+        self.highlight_scale()?;
+        Ok(())
     }
 
     pub fn keyboard_keys(&self) -> Vec<KeyboardKey> {
@@ -110,8 +172,12 @@ impl TargetDevice {
             .collect()
     }
 
-    fn highlight_scale(&self) -> Result<(), Box<dyn Error>> {
-        let device = self.device.as_ref().ok_or("device not connected")?;
+    fn highlight_scale(&self) -> Result<(), KeyboardError> {
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(KeyboardError::KeyboardNotConnected)?;
+
         let keys = self.keyboard_keys();
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
@@ -127,12 +193,17 @@ impl TargetDevice {
                 },
             );
         }
-        device.write(&report)?;
+        device
+            .write(&report)
+            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
         Ok(())
     }
 
-    pub fn read_input(&self) -> Result<(), Box<dyn Error>> {
-        let device = self.device.as_ref().ok_or("device not connected")?;
+    pub fn read_input(&self) -> Result<(), KeyboardError> {
+        let device = self
+            .device
+            .as_ref()
+            .ok_or(KeyboardError::KeyboardNotConnected)?;
         let mut buf = [0u8; 64];
         match device.read_timeout(&mut buf, 100) {
             Ok(0) => {}

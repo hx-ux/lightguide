@@ -8,6 +8,11 @@ members = [
     "cli",
     "ui"
 ]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+readme = "README.md"
 
 
 [workspace.dependencies]

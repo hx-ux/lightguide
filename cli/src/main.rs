@@ -1,6 +1,9 @@
-use backend::{keycolor::KeyColor, targetdevice::TargetDevice};
+use backend::{
+    keycolor::KeyColor,
+    targetdevice::{KeyboardError, TargetDevice},
+};
 use clap::{Parser, Subcommand};
-use std::{error::Error, thread, time::Duration};
+use std::{thread, time::Duration};
 
 #[derive(Parser)]
 #[command(
@@ -33,19 +36,10 @@ enum Commands {
     Automatic {},
 }
 
-pub fn main() -> Result<(), Box<dyn Error>> {
+pub fn main() -> Result<(), KeyboardError> {
     let cli = Cli::parse();
-    let mut tg = TargetDevice::new(
-        "kontrol49mk1".to_string(),
-        49,
-        250,
-        0x82,
-        0x17cc,
-        0x1350,
-        KeyColor::new(255, 0, 0),
-        KeyColor::new(0, 0, 0),
-        KeyColor::new(0, 100, 0),
-    );
+
+    let mut tg = TargetDevice::default();
     // sudo chmod a+rw /dev/hidraw10
     // sudo chmod 600 /dev/hidraw10
     tg.open()?;
@@ -56,9 +50,9 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             println!("ok: lights off");
         }
         Commands::Scale { root, scale } => {
-            tg.notes_off()?;
             let concat = format!("{} {}", root.trim().to_uppercase(), scale.trim());
             tg.set_scale_string(concat)?;
+            tg.notes_off()?;
         }
         Commands::Listen { count } => {
             let mut n = 0;
