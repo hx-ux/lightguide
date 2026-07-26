@@ -37,6 +37,7 @@ struct LightGuideApp {
     sel_pitch: PitchClass,
     sel_scale: ScaleKind,
     messages: Vec<ConsoleMessage>,
+    show_log: bool,
 }
 
 impl Default for LightGuideApp {
@@ -47,73 +48,89 @@ impl Default for LightGuideApp {
             sel_pitch: PitchClass::C,
             sel_scale: ScaleKind::Ionian,
             messages: Vec::new(),
+            show_log: true,
         }
     }
 }
 
 impl LightGuideApp {
     pub fn log_event(&mut self, text: String, msg_type: MessageType) {
-        self.messages.push(ConsoleMessage {
-            text: text.to_string(),
-            msg_type,
-        });
+        self.messages.push(ConsoleMessage { text, msg_type });
     }
 }
 
 impl eframe::App for LightGuideApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
-            ui.heading(format!("Lightguide {}", self.device.name.clone()));
-            ui.heading(format!("connect {}", self.is_connected.to_string()));
+            ui.heading(format!("Lightguide {}", self.device.name));
 
-            egui::ComboBox::from_label("Root")
-                .selected_text(HarmoniaUtils::normalize_pitch_names(&self.sel_pitch))
-                .show_ui(ui, |ui| {
-                    for note in HarmoniaUtils::pitch_class_selection().iter() {
-                        ui.selectable_value(
-                            &mut self.sel_pitch,
-                            note.clone(),
-                            HarmoniaUtils::normalize_pitch_names(&note),
-                        );
-                    }
-                });
-
-            if self.sel_pitch != self.device.root_note {
-                let _ = self.device.set_root(self.sel_pitch.clone());
-            }
-
-            if ui.button("Connect").clicked() {
-                let r = self.device.open();
-                match r {
-                    Ok(_) => {
-                        self.is_connected = true;
-                        let _ = self.device.notes_off();
-                        let _ = self
-                            .device
-                            .set_scale(self.sel_pitch.clone(), self.sel_scale.clone());
-                        self.log_event("Connected".to_string(), MessageType::Success);
-                    }
-                    Err(err) => {
-                        self.log_event(err.to_string(), MessageType::Error);
+            ui.horizontal(|ui| {
+                let c_text = if self.is_connected {
+                    "Connected"
+                } else {
+                    "Connect"
+                };
+                // Connect button
+                if ui.button(c_text).highlight().clicked() {
+                    match self.device.open() {
+                        Ok(_) => {
+                            self.is_connected = true;
+                            let _ = self.device.notes_off();
+                            let _ = self.device.set_scale(self.sel_pitch, self.sel_scale);
+                            self.log_event("Connected".into(), MessageType::Success);
+                        }
+                        Err(err) => {
+                            self.log_event(err.to_string(), MessageType::Error);
+                        }
                     }
                 }
-            }
 
-            egui::ComboBox::from_label("Scale")
-                .selected_text(self.sel_scale.clone().to_string())
-                .show_ui(ui, |ui| {
-                    for ss in ScaleKind::ALL {
-                        ui.selectable_value(
-                            &mut self.sel_scale,
-                            ss.clone(),
-                            &ss.clone().to_string(),
-                        );
+                // Root pitch selector
+                egui::ComboBox::from_label("Root")
+                    .selected_text(HarmoniaUtils::normalize_pitch_names(&self.sel_pitch))
+                    .show_ui(ui, |ui| {
+                        for note in HarmoniaUtils::pitch_class_selection().iter() {
+                            ui.selectable_value(
+                                &mut self.sel_pitch,
+                                note.clone(),
+                                HarmoniaUtils::normalize_pitch_names(note),
+                            );
+                        }
+                    });
+
+                ui.horizontal(|ui| {
+                    ui.label("Highlight");
+                    let mut hc = egui::Color32::from_rgb(
+                        self.device.keys_hightlight_color.r,
+                        self.device.keys_hightlight_color.g,
+                        self.device.keys_hightlight_color.b,
+                    );
+                    if ui.color_edit_button_srgba(&mut hc).changed() {
+                        let _ = self.device.set_highlight_color(KeyColor {
+                            r: hc.r(),
+                            g: hc.g(),
+                            b: hc.b(),
+                        });
                     }
                 });
 
-            if self.sel_scale != self.device.scale {
-                let _ = self.device.set_scale_kind(self.sel_scale.clone());
-            }
+                if self.sel_pitch != self.device.root_note {
+                    let _ = self.device.set_root(self.sel_pitch);
+                }
+
+                // Scale selector
+                egui::ComboBox::from_label("Scale")
+                    .selected_text(self.sel_scale.to_string())
+                    .show_ui(ui, |ui| {
+                        for ss in ScaleKind::ALL {
+                            ui.selectable_value(&mut self.sel_scale, *ss, ss.to_string());
+                        }
+                    });
+
+                if self.sel_scale != self.device.scale {
+                    let _ = self.device.set_scale_kind(self.sel_scale);
+                }
+            });
 
             draw_keyboard(
                 ui,
@@ -121,18 +138,32 @@ impl eframe::App for LightGuideApp {
                 self.device.keys_hightlight_color,
             );
 
-            ScrollArea::vertical()
-                .max_height(200.0)
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    for msg in &self.messages {
-                        let color = match msg.msg_type {
-                            MessageType::Success => egui::Color32::LIGHT_GREEN,
-                            MessageType::Error => egui::Color32::LIGHT_RED,
-                        };
-                        ui.colored_label(color, &msg.text);
-                    }
-                });
+            // Toggle log visibility
+            if ui
+                .button(if self.show_log {
+                    "Hide Log"
+                } else {
+                    "Show Log"
+                })
+                .clicked()
+            {
+                self.show_log = !self.show_log;
+            }
+
+            if self.show_log {
+                ScrollArea::vertical()
+                    .max_height(200.0)
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        for msg in &self.messages {
+                            let color = match msg.msg_type {
+                                MessageType::Success => egui::Color32::LIGHT_GREEN,
+                                MessageType::Error => egui::Color32::LIGHT_RED,
+                            };
+                            ui.colored_label(color, &msg.text);
+                        }
+                    });
+            }
         });
     }
 }

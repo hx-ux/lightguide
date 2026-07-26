@@ -199,6 +199,18 @@ impl TargetDevice {
         Ok(())
     }
 
+    pub fn set_highlight_color(&mut self, color: KeyColor) -> Result<(), KeyboardError> {
+        self.keys_hightlight_color = color;
+        self.highlight_scale()?;
+        Ok(())
+    }
+
+    pub fn set_dim_color(&mut self, color: KeyColor) -> Result<(), KeyboardError> {
+        self.keys_dim_color = color;
+        self.highlight_scale()?;
+        Ok(())
+    }
+
     pub fn read_input(&self) -> Result<(), KeyboardError> {
         let device = self
             .device
