@@ -18,3 +18,7 @@ readme = "README.md"
 [workspace.dependencies]
 harmonia = "0.1.0"
 hidapi = "2.6.6"
+
+[profile.release]
+strip = true
+lto = true
