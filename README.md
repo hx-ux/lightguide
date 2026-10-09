@@ -7,3 +7,9 @@ Currently, only the Komplete Kontrol S49 MK1 is supported
 
 - Display Scales
 - Change Key-Colors
+
+## Run
+
+```
+cargo run --bin Lightguide_CLI
+```

@@ -5,7 +5,7 @@ edition = "2021"
 [workspace]
 members = [
     "backend",
-    "cli",
+    "cli", "rest_api",
     "ui"
 ]
 resolver = "3"

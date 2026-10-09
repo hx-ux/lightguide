@@ -1,7 +1,4 @@
-use backend::{
-    keycolor::KeyColor,
-    targetdevice::{KeyboardError, TargetDevice},
-};
+use backend::targetdevice::{KeyboardError, TargetDevice};
 use clap::{Parser, Subcommand};
 use std::{thread, time::Duration};
 

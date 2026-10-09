@@ -33,7 +33,7 @@ impl fmt::Display for KeyboardError {
         }
     }
 }
-
+#[derive(Debug)]
 pub struct TargetDevice {
     pub name: String,
     pub keys: usize,
