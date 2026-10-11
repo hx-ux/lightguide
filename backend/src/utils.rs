@@ -7,11 +7,12 @@ pub enum KeyboardKeyType {
 
 #[derive(Clone)]
 
+// Abstraction of an single key of the keyboard with its led
 pub struct KeyboardKey {
     pub position: usize,
     pub ktype: KeyboardKeyType,
     pub display_name: String,
-    pub active: bool,
+    pub led_active: bool,
 }
 
 impl KeyboardKey {
@@ -19,17 +20,18 @@ impl KeyboardKey {
         position: usize,
         ktype: KeyboardKeyType,
         display_name: String,
-        active: bool,
+        led_active: bool,
     ) -> Self {
         Self {
             position,
             ktype,
             display_name,
-            active,
+            led_active,
         }
     }
 
-    pub fn from_note(pitch: PitchClass, position: usize, active: bool) -> Self {
+    // targets a key via its musical notation
+    pub fn from_note(pitch: PitchClass, position: usize, led_active: bool) -> Self {
         Self {
             position,
             ktype: if (|pc: u8| matches!(pc, 1 | 3 | 6 | 8 | 10))(pitch.value()) {
@@ -38,7 +40,7 @@ impl KeyboardKey {
                 KeyboardKeyType::White
             },
             display_name: HarmoniaUtils::normalize_pitch_names(&pitch),
-            active,
+            led_active,
         }
     }
 }
@@ -46,22 +48,20 @@ impl KeyboardKey {
 pub struct HarmoniaUtils {}
 
 impl HarmoniaUtils {
-    pub fn pitch_class_selection() -> Vec<PitchClass> {
-        let mut g: Vec<PitchClass> = vec![];
-        g.push(PitchClass::C);
-        g.push(PitchClass::C_SHARP);
-        g.push(PitchClass::D);
-        g.push(PitchClass::D_SHARP);
-        g.push(PitchClass::E);
-        g.push(PitchClass::F);
-        g.push(PitchClass::F_SHARP);
-        g.push(PitchClass::G);
-        g.push(PitchClass::G_SHARP);
-        g.push(PitchClass::A);
-        g.push(PitchClass::A_SHARP);
-        g.push(PitchClass::B);
-        g
-    }
+    pub const PITCH_CLASS_SELECTION: [PitchClass; 12] = [
+        PitchClass::C,
+        PitchClass::C_SHARP,
+        PitchClass::D,
+        PitchClass::D_SHARP,
+        PitchClass::E,
+        PitchClass::F,
+        PitchClass::F_SHARP,
+        PitchClass::G,
+        PitchClass::G_SHARP,
+        PitchClass::A,
+        PitchClass::A_SHARP,
+        PitchClass::B,
+    ];
 
     pub fn normalize_pitch_names(pitch: &PitchClass) -> String {
         let name = match pitch.value() {

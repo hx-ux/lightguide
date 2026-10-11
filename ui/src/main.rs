@@ -89,7 +89,7 @@ impl eframe::App for LightGuideApp {
                 egui::ComboBox::from_label("Root")
                     .selected_text(HarmoniaUtils::normalize_pitch_names(&self.sel_pitch))
                     .show_ui(ui, |ui| {
-                        for note in HarmoniaUtils::pitch_class_selection().iter() {
+                        for note in HarmoniaUtils::PITCH_CLASS_SELECTION.iter() {
                             ui.selectable_value(
                                 &mut self.sel_pitch,
                                 note.clone(),
@@ -202,7 +202,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
 
         painter.rect_filled(outer_rect, egui::CornerRadius::ZERO, egui::Color32::WHITE);
 
-        if i.active {
+        if i.led_active {
             painter.rect_filled(
                 highlight_rect,
                 egui::CornerRadius::ZERO,
@@ -241,7 +241,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
 
             painter.rect_filled(outer_rect, egui::CornerRadius::ZERO, egui::Color32::BLACK);
 
-            if i.active {
+            if i.led_active {
                 painter.rect_filled(
                     highlight_rect,
                     egui::CornerRadius::ZERO,
