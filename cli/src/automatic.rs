@@ -49,13 +49,7 @@ pub struct AutomaticMode {
 }
 
 impl AutomaticMode {
-    pub fn new(tg: &mut TargetDevice) -> Self {
-        tg.root_note = PitchClass::new(0);
-        tg.scale = ScaleKind::MajorPentatonic;
-        tg.keys_hightlight_color = KeyColor::new(255, 0, 0);
-        tg.keys_dim_color = KeyColor::new(0, 0, 0);
-        tg.response_color = KeyColor::new(0, 100, 0);
-
+    pub fn new() -> Self {
         Self {
             mode: Mode::Performance,
             knobs: [0.0; NUM_KNOBS],

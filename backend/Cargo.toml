@@ -7,4 +7,6 @@ edition = "2021"
 clap = { version = "4", features = ["derive"] }
 harmonia = { workspace = true }
 hidapi = { workspace = true }
+serde = { workspace = true }
+
 midir = "0.10"

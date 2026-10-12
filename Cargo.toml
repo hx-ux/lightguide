@@ -18,6 +18,9 @@ readme = "README.md"
 [workspace.dependencies]
 harmonia = "0.1.0"
 hidapi = "2.6.6"
+serde = "1.0.229"
+serde_json = "1.0"
+
 
 [profile.release]
 strip = true

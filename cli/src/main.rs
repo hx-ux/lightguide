@@ -1,10 +1,12 @@
 mod automatic;
-
+mod listen;
 use automatic::AutomaticMode;
 use backend::midi::list_midi_ports;
 use backend::targetdevice::TargetDevice;
 use backend::{display::TextAlignment, keyboard_error::KeyboardError};
 use clap::{Parser, Subcommand};
+
+use crate::listen::AutomaticListenMode;
 
 #[derive(Parser)]
 #[command(
@@ -21,11 +23,7 @@ enum Commands {
     /// Turn off all key lights
     Off,
     /// Print all input events (buttons, keys, sliders, knobs)
-    Listen {
-        /// Stop after N events (0 = run forever)
-        #[arg(default_value_t = 0)]
-        count: usize,
-    },
+    Listen,
     /// Show text on the displays (spread over all 9 displays, 2 rows with 8 chars per display )
     Display {
         #[arg(default_value = "Hello")]
@@ -51,51 +49,17 @@ pub fn main() -> Result<(), KeyboardError> {
     let mut tg = TargetDevice::default();
     // sudo chmod a+rw /dev/hidraw10
     // sudo chmod 600 /dev/hidraw10
-    tg.open_hid_device()?;
+    tg.open_hid_device_midi()?;
 
     match cli.command {
         Commands::Off => match tg.notes_off() {
             Ok(_) => println!("lights off"),
             Err(err) => println!("Err: {}", err),
         },
-        Commands::Listen { count } => {
-            match tg.midi_port_name() {
-                Some(name) => println!("MIDI port: {name}"),
-                None => println!("MIDI port not connected - no key/slider events"),
-            }
-
-            tg.on_button(|_dev, button, pressed| {
-                println!(
-                    "BUTTON {:?} {}",
-                    button,
-                    if pressed { "down" } else { "up" }
-                );
-            });
-            tg.on_key(|_dev, key| {
-                println!(
-                    "KEY note={} index={:?} vel={} {}",
-                    key.note,
-                    key.key_index,
-                    key.velocity,
-                    if key.pressed { "down" } else { "up" }
-                );
-            });
-
-            tg.on_slider(|_dev, slider, value| {
-                println!("SLIDER {:?} = {}", slider, value);
-            });
-
-            tg.on_encoder(|_dev, enc| {
-                println!("ENCODER {} delta={} raw={}", enc.index, enc.delta, enc.raw);
-            });
-
-            let mut n = 0;
-            loop {
-                n += tg.poll(5)?.len();
-                if count != 0 && n >= count {
-                    break;
-                }
-            }
+        Commands::Listen => {
+            let mut listen = AutomaticListenMode::new();
+            println!("listen mode - press Ctrl+C to quit",);
+            let _ = listen.run_listen(&mut tg);
         }
         Commands::Display {
             upper_text: top,
@@ -107,12 +71,17 @@ pub fn main() -> Result<(), KeyboardError> {
             };
         }
         Commands::MidiPorts => {
+            match tg.midi_port_name() {
+                Some(name) => println!("MIDI port: {name}"),
+                None => println!("MIDI port not connected - no key/slider events"),
+            }
+            println!("Aviable ports");
             for p in list_midi_ports()? {
                 println!("{p}");
             }
         }
         Commands::Automatic => {
-            let mut automatic = AutomaticMode::new(&mut tg);
+            let mut automatic = AutomaticMode::new();
 
             println!("automatic mode - press SCALE to toggle Performance / Scale, Ctrl+C to quit",);
             automatic.run(&mut tg)?;
