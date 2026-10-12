@@ -52,7 +52,7 @@ impl Default for TargetDevice {
             product_id: 0x1350,
             keys_hightlight_color: KeyColor::new(255, 0, 0),
             keys_dim_color: KeyColor::new(0, 0, 0),
-            response_color: KeyColor::new(0, 100, 0),
+            response_color: KeyColor::new(255, 255, 255),
             device: None,
             root_note: PitchClass::C,
             scale: ScaleKind::Ionian,
@@ -189,36 +189,51 @@ impl TargetDevice {
         Ok(())
     }
 
+    /// Pitch class of the physical key at `pos` (0 = left-most key),
+    /// taking the current octave shift / transposition into account.
+    pub fn pitch_class_at(&self, pos: usize) -> PitchClass {
+        PitchClass::new(((self.first_note as usize + pos) % 12) as u8)
+    }
+
     pub fn keyboard_keys(&self) -> Vec<KeyboardKey> {
         let build_scale = Scale::new(self.root_note, self.scale);
         (0..self.keys)
             .map(|pos| {
-                let pc = PitchClass::new((pos % 12) as u8);
+                let pc = self.pitch_class_at(pos);
                 KeyboardKey::from_note(pc, pos, build_scale.contains(pc))
             })
             .collect()
     }
 
     fn highlight_scale(&self) -> Result<(), KeyboardError> {
+        let colors: Vec<KeyColor> = self
+            .keyboard_keys()
+            .iter()
+            .map(|key| {
+                if key.led_active {
+                    self.keys_hightlight_color
+                } else {
+                    self.keys_dim_color
+                }
+            })
+            .collect();
+        self.set_key_leds(&colors)
+    }
+
+    /// Set the color of every key LED at once.
+    ///
+    /// `colors[i]` is the color of key `i` (0 = left-most key). Keys without
+    /// an entry are switched off, surplus entries are ignored.
+    pub fn set_key_leds(&self, colors: &[KeyColor]) -> Result<(), KeyboardError> {
         let device = self
             .device
             .as_ref()
             .ok_or(KeyboardError::KeyboardNotConnected)?;
 
-        let keys = self.keyboard_keys();
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
-
-        for key in keys {
-            set_key_color(
-                &mut report,
-                key.position,
-                if key.led_active {
-                    self.keys_hightlight_color
-                } else {
-                    self.keys_dim_color
-                },
-            );
+        for (pos, color) in colors.iter().take(self.keys).enumerate() {
+            set_key_color(&mut report, pos, *color);
         }
         device
             .write(&report)

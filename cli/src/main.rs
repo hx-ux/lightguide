@@ -1,8 +1,10 @@
+mod automatic;
+
+use automatic::AutomaticMode;
 use backend::midi::list_midi_ports;
 use backend::targetdevice::TargetDevice;
 use backend::{display::TextAlignment, keyboard_error::KeyboardError};
 use clap::{Parser, Subcommand};
-use harmonia::{PitchClass, ScaleKind};
 
 #[derive(Parser)]
 #[command(
@@ -46,8 +48,8 @@ enum Commands {
     },
     /// List all MIDI input ports (to find the keyboard's port name)
     MidiPorts,
-    /// Control the scale via the hardware itself
-    Automatic {},
+    /// Control the keyboard via the hardware itself (SCALE button toggles the mode)
+    Automatic,
 }
 
 pub fn main() -> Result<(), KeyboardError> {
@@ -75,14 +77,14 @@ pub fn main() -> Result<(), KeyboardError> {
                 None => println!("MIDI port not connected - no key/slider events"),
             }
 
-            tg.on_button(|dev, button, pressed| {
+            tg.on_button(|_dev, button, pressed| {
                 println!(
                     "BUTTON {:?} {}",
                     button,
                     if pressed { "down" } else { "up" }
                 );
             });
-            tg.on_key(|dev, key| {
+            tg.on_key(|_dev, key| {
                 println!(
                     "KEY note={} index={:?} vel={} {}",
                     key.note,
@@ -122,38 +124,11 @@ pub fn main() -> Result<(), KeyboardError> {
                 println!("{p}");
             }
         }
-        Commands::Automatic {} => {
-            tg.on_button(|dev, button, pressed| {
-                println!(
-                    "BUTTON {:?} {}",
-                    button,
-                    if pressed { "down" } else { "up" }
-                );
-            });
-            tg.on_key(|dev, key| {
-                println!(
-                    "KEY note={} index={:?} vel={} {}",
-                    key.note,
-                    key.key_index,
-                    key.velocity,
-                    if key.pressed { "down" } else { "up" }
-                );
-            });
+        Commands::Automatic => {
+            let mut automatic = AutomaticMode::new(&mut tg);
 
-            tg.on_slider(|_dev, slider, value| {
-                println!("SLIDER {:?} = {}", slider, value);
-            });
-
-            // GLOBAL
-            // set to c by default;
-            let pitch = 0;
-            let _ = tg.set_scale(PitchClass::new(0), ScaleKind::Ionian);
-            // 0 == performange view
-
-            let mut n = 0;
-            loop {
-                n += tg.poll(5)?.len();
-            }
+            println!("automatic mode - press SCALE to toggle Performance / Scale, Ctrl+C to quit",);
+            automatic.run(&mut tg)?;
         }
         Commands::Bar { display, value } => tg.display_bar(display, value)?,
     }
