@@ -72,7 +72,7 @@ impl eframe::App for LightGuideApp {
                 };
                 // Connect button
                 if ui.button(c_text).highlight().clicked() {
-                    match self.device.open() {
+                    match self.device.open_hid_device() {
                         Ok(_) => {
                             self.is_connected = true;
                             let _ = self.device.notes_off();

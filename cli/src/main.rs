@@ -20,13 +20,6 @@ struct Cli {
 enum Commands {
     /// Turn off all key lights
     Off,
-    /// Highlight a musical scale on the keyboard
-    Scale {
-        #[arg(default_value = "C")]
-        root: String,
-        #[arg(default_value = "Ionian")]
-        scale: String,
-    },
     /// Print all input events (buttons, keys, sliders, knobs)
     Listen {
         /// Stop after N events (0 = run forever)
@@ -58,19 +51,13 @@ pub fn main() -> Result<(), KeyboardError> {
     let mut tg = TargetDevice::default();
     // sudo chmod a+rw /dev/hidraw10
     // sudo chmod 600 /dev/hidraw10
-    tg.open()?;
+    tg.open_hid_device()?;
 
     match cli.command {
         Commands::Off => match tg.notes_off() {
             Ok(_) => println!("lights off"),
             Err(err) => println!("Err: {}", err),
         },
-        Commands::Scale { root, scale } => {
-            match tg.set_scale_string(format!("{} {}", root.trim().to_uppercase(), scale.trim())) {
-                Ok(_) => println!("set scale {}-{}", root, scale),
-                Err(err) => println!("Err: {}", err),
-            };
-        }
         Commands::Listen { count } => {
             match tg.midi_port_name() {
                 Some(name) => println!("MIDI port: {name}"),

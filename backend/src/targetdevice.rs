@@ -17,7 +17,6 @@ const NUM_ENCODERS: usize = 9;
 
 #[derive(Debug)]
 pub struct TargetDevice {
-    // name of the tartget
     pub name: String,
     pub keys: usize,
     pub report_size: usize,
@@ -115,7 +114,7 @@ impl TargetDevice {
     /// A missing MIDI port is *not* treated as an error, only a warning is
     /// printed; button / encoder events and the lights still work without it.
     ///
-    pub fn open(&mut self) -> Result<(), KeyboardError> {
+    pub fn open_hid_device(&mut self) -> Result<(), KeyboardError> {
         let api =
             hidapi::HidApi::new().map_err(|e| KeyboardError::CantConnectKeyboard(e.to_string()))?;
 
@@ -141,6 +140,12 @@ impl TargetDevice {
         Ok(())
     }
 
+    pub fn open_hid_device_midi(&mut self) -> Result<(), KeyboardError> {
+        self.open_hid_device()?;
+        self.open_midi()?;
+        Ok(())
+    }
+
     /// (Re)connect to the MIDI port matching [`Self::midi_port_filter`].
     pub fn open_midi(&mut self) -> Result<(), KeyboardError> {
         self.midi = None;
@@ -148,6 +153,7 @@ impl TargetDevice {
         Ok(())
     }
 
+    // set all keys dark
     pub fn notes_off(&self) -> Result<(), KeyboardError> {
         let device = self
             .device
@@ -233,7 +239,7 @@ impl TargetDevice {
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
         for (pos, color) in colors.iter().take(self.keys).enumerate() {
-            set_key_color(&mut report, pos, *color);
+            set_single_key_color(&mut report, pos, *color);
         }
         device
             .write(&report)
@@ -446,10 +452,6 @@ impl TargetDevice {
     // Display
     // ---------------------------------------------------------------------
 
-    /// Show `text` on one display (0..=8), `line` 0 = top, 1 = bottom.
-    /// Max. 8 characters, a `.` uses the decimal point of the previous character.
-
-    /// Like [`Self::display_text`] with custom alignment.
     pub fn display_text(
         &mut self,
         display: usize,
@@ -511,7 +513,7 @@ impl TargetDevice {
     }
 }
 
-fn set_key_color(report: &mut [u8], key: usize, color: KeyColor) {
+fn set_single_key_color(report: &mut [u8], key: usize, color: KeyColor) {
     let offset = 1 + key * 3;
     if offset + 3 <= report.len() {
         report[offset..offset + 3].copy_from_slice(&color.to_bytes());

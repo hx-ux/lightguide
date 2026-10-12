@@ -1,7 +1,3 @@
-//! * [`Mode::Performance`] – mimics the stock behaviour of the keyboard:
-
-//! * [`Mode::Scale`] – the selected scale is shown on the key LEDs.
-
 use std::collections::HashMap;
 
 use backend::{
@@ -165,14 +161,6 @@ impl AutomaticMode {
         tg: &mut TargetDevice,
         enc: EncoderEvent,
     ) -> Result<(), KeyboardError> {
-        // Main encoder: browse through the scales in scale mode
-        if enc.index == 0 {
-            if self.mode == Mode::Scale && enc.delta != 0 {
-                self.shift_scale(tg, enc.delta.signum())?;
-            }
-            return Ok(());
-        }
-
         let knob = enc.index - 1;
         if knob >= NUM_KNOBS {
             return Ok(());
@@ -206,7 +194,6 @@ impl AutomaticMode {
         self.render_all_components(tg)
     }
 
-    /// Integer knob value 0..=127
     pub fn knob_value(&self, knob: usize) -> u8 {
         self.knobs[knob].round() as u8
     }

@@ -38,7 +38,7 @@ async fn main() {
     let mut tg = TargetDevice::default();
     // sudo chmod a+rw /dev/hidraw10
     // sudo chmod 600 /dev/hidraw10
-    match tg.open() {
+    match tg.open_hid_device() {
         Ok(device) => {
             tg.notes_off();
 

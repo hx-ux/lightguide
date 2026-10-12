@@ -5,7 +5,6 @@ use crate::{
     targetdevice::TargetDevice,
 };
 
-/// Callback for button presses/releases: `(device, button, pressed)`
 pub type ButtonCallback = Box<dyn FnMut(&mut TargetDevice, Button, bool) + Send>;
 
 pub type KeyCallback = Box<dyn FnMut(&mut TargetDevice, KeyEvent) + Send>;
@@ -23,7 +22,7 @@ pub struct Callbacks {
 }
 
 impl Callbacks {
-    fn append(&mut self, other: &mut Callbacks) {
+    pub fn append(&mut self, other: &mut Callbacks) {
         self.button.append(&mut other.button);
         self.key.append(&mut other.key);
         self.slider.append(&mut other.slider);
