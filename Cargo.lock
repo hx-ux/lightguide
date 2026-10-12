@@ -565,6 +565,7 @@ dependencies = [
  "hidapi",
  "midir",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

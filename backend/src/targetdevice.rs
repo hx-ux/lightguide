@@ -9,34 +9,55 @@ use crate::{
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
+use serde::{Deserialize, Serialize};
 
 /// Number of bytes of the button bitfield in the HID input report
 const BUTTON_BYTES: usize = 5;
 /// Main encoder + 8 knobs
 const NUM_ENCODERS: usize = 9;
 
-#[derive(Debug)]
+fn default_scale() -> ScaleKind {
+    ScaleKind::Ionian
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TargetDevice {
     pub name: String,
     pub keys: usize,
+    #[serde(skip)]
     pub report_size: usize,
+    #[serde(skip)]
     pub key_leds_adress: u8,
     pub vendor_id: u16,
     pub product_id: u16,
+    #[serde(skip)]
     pub keys_hightlight_color: KeyColor,
+    #[serde(skip)]
     pub keys_dim_color: KeyColor,
+    #[serde(skip)]
     pub response_color: KeyColor,
+    #[serde(skip)]
     device: Option<HidDevice>,
+    #[serde(skip)]
     pub root_note: PitchClass,
+    #[serde(skip)]
+    #[serde(default = "default_scale")]
     pub scale: ScaleKind,
     /// Case-insensitive substring used to find the keyboard's MIDI port
+    #[serde(skip)]
     pub midi_port_filter: String,
     /// MIDI note of the left-most key (updated from the HID report on octave shift)
+    #[serde(skip)]
     pub first_note: u8,
+    #[serde(skip)]
     midi: Option<MidiLink>,
+    #[serde(skip)]
     pub callbacks: Callbacks,
+    #[serde(skip)]
     button_state: [u8; BUTTON_BYTES],
+    #[serde(skip)]
     encoder_state: Option<[u16; NUM_ENCODERS]>,
+    #[serde(skip)]
     display: DisplayBuffer,
 }
 

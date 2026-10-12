@@ -1,3 +1,5 @@
+use std::default;
+
 /// Simple RGB color for device LED control
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyColor {
@@ -17,5 +19,11 @@ impl KeyColor {
 
     pub fn to_bytes(self) -> [u8; 3] {
         [self.r, self.g, self.b]
+    }
+}
+
+impl Default for KeyColor {
+    fn default() -> Self {
+        Self { r: 255, g: 0, b: 0 }
     }
 }
