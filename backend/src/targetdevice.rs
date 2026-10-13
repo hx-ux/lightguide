@@ -47,6 +47,9 @@ pub struct TargetDevice {
     #[serde(skip)]
     midi_link: Option<MidiLink>,
     setup_midi: bool,
+    // see midi options
+    #[serde(skip)]
+    midi_out: Option<midi::MidiOut>,
     #[serde(skip)]
     pub callbacks: Callbacks,
     #[serde(skip)]
@@ -81,6 +84,7 @@ impl Default for TargetDevice {
             button_state: [0; BUTTON_BYTES],
             encoder_state: None,
             display: DisplayBuffer::default(),
+            midi_out: None,
         }
     }
 }
@@ -202,6 +206,16 @@ impl TargetDevice {
         self.midi_link = None;
         self.midi_link = Some(midi::connect(&self.midi_port_filter)?);
         Ok(())
+    }
+    /// Connect to a MIDI output port matching `filter` (case-insensitive).
+    pub fn open_midi_out(&mut self, filter: &str) -> Result<(), KeyboardError> {
+        self.midi_out = None;
+        self.midi_out = Some(midi::MidiOut::connect(filter)?);
+        Ok(())
+    }
+
+    pub fn midi_out_mut(&mut self) -> Option<&mut midi::MidiOut> {
+        self.midi_out.as_mut()
     }
 
     // set all keys dark
@@ -468,6 +482,13 @@ impl TargetDevice {
         if events.is_empty() {
             return;
         }
+
+        if let Some(out) = &mut self.midi_out {
+            for ev in events {
+                let _ = out.send_input_event(ev);
+            }
+        }
+
         // Temporarily take the callbacks out so they can borrow `self` mutably
         let mut cbs = std::mem::take(&mut self.callbacks);
         for ev in events {

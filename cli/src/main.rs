@@ -41,7 +41,7 @@ enum Commands {
         #[arg(long, default_value_t = 1.0)]
         value: f32,
     },
-    /// List all MIDI input ports
+    /// List all MIDI input/output ports
     MidiPorts,
     Automatic,
     /// Save device configuration to a JSON file
@@ -110,6 +110,10 @@ pub fn main() -> Result<(), KeyboardError> {
             let mut automatic = AutomaticMode::new();
 
             println!("automatic mode - press SCALE to toggle Performance / Scale, Ctrl+C to quit",);
+            match tg.open_midi_out("Steinberg UR22 Port1") {
+                Ok(_) => println!("MIDI out connected",),
+                Err(e) => eprintln!("warning: failed to open MIDI out  {e}"),
+            }
             automatic.run(&mut tg)?;
         }
         Commands::Bar { display, value } => tg.display_bar(display, value)?,

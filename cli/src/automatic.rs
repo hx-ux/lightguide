@@ -5,8 +5,8 @@ use backend::{
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
     keyboard_error::KeyboardError,
     keycolor::KeyColor,
-    targetdevice::TargetDevice,
     pitch_extension::StringExt,
+    targetdevice::TargetDevice,
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 
@@ -87,7 +87,13 @@ impl AutomaticMode {
                 slider: Slider::Sustain,
                 value,
             } => self.on_sustain(tg, value),
-            InputEvent::Slider { .. } => Ok(()),
+            InputEvent::Slider { slider, value } => {
+                // Emulate the slider midi values
+                if let Some(out) = tg.midi_out_mut() {
+                    let _ = out.send_input_event(&InputEvent::Slider { slider, value });
+                }
+                Ok(())
+            }
         }
     }
 
