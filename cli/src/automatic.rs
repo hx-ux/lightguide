@@ -6,7 +6,7 @@ use backend::{
     keyboard_error::KeyboardError,
     keycolor::KeyColor,
     targetdevice::TargetDevice,
-    utils::HarmoniaUtils,
+    pitch_extension::StringExt,
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 
@@ -238,7 +238,7 @@ impl AutomaticMode {
                 }
             }
             Mode::Scale => {
-                let root = HarmoniaUtils::normalize_pitch_names(&tg.root_note);
+                let root = &tg.root_note.display_text().to_string();
 
                 tg.display_text(0, 0, "SCALE", TextAlignment::Center)?;
                 tg.display_text(0, 1, "MODE", TextAlignment::Center)?;

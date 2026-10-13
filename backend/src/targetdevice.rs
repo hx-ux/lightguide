@@ -3,9 +3,11 @@ use crate::{
     display::{self, DisplayBuffer, TextAlignment},
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
     keyboard_error::KeyboardError,
+    keyboard_key::KeyboardKey,
     keycolor::KeyColor,
     midi::{self, MidiLink},
-    utils::KeyboardKey,
+    pitch_extension::pitch_serde,
+    scale_extension::scale_serde,
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
@@ -16,11 +18,8 @@ const BUTTON_BYTES: usize = 5;
 /// Main encoder + 8 knobs
 const NUM_ENCODERS: usize = 9;
 
-fn default_scale() -> ScaleKind {
-    ScaleKind::Ionian
-}
-
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TargetDevice {
     pub name: String,
     pub keys: usize,
@@ -30,27 +29,26 @@ pub struct TargetDevice {
     pub key_leds_adress: u8,
     pub vendor_id: u16,
     pub product_id: u16,
-    #[serde(skip)]
     pub keys_hightlight_color: KeyColor,
-    #[serde(skip)]
     pub keys_dim_color: KeyColor,
-    #[serde(skip)]
     pub response_color: KeyColor,
     #[serde(skip)]
     device: Option<HidDevice>,
-    #[serde(skip)]
+    // #[serde(skip)]
+    #[serde(with = "pitch_serde")]
     pub root_note: PitchClass,
-    #[serde(skip)]
-    #[serde(default = "default_scale")]
+    // #[serde(skip)]
+    // #[serde(default = "default_scale")]
+    #[serde(with = "scale_serde")]
     pub scale: ScaleKind,
     /// Case-insensitive substring used to find the keyboard's MIDI port
-    #[serde(skip)]
     pub midi_port_filter: String,
     /// MIDI note of the left-most key (updated from the HID report on octave shift)
     #[serde(skip)]
     pub first_note: u8,
     #[serde(skip)]
-    midi: Option<MidiLink>,
+    midi_link: Option<MidiLink>,
+    setup_midi: bool,
     #[serde(skip)]
     pub callbacks: Callbacks,
     #[serde(skip)]
@@ -79,7 +77,8 @@ impl Default for TargetDevice {
             midi_port_filter: midi::DEFAULT_PORT_FILTER.to_string(),
             // S49: C2 .. C6 without octave shift
             first_note: 36,
-            midi: None,
+            midi_link: None,
+            setup_midi: true,
             callbacks: Callbacks::default(),
             button_state: [0; BUTTON_BYTES],
             encoder_state: None,
@@ -114,6 +113,39 @@ impl TargetDevice {
         }
     }
 
+    /// Serialize the device configuration to a JSON string.
+    pub fn to_json(&self) -> Result<String, KeyboardError> {
+        serde_json::to_string_pretty(self).map_err(Into::into)
+    }
+
+    /// Deserialize a `TargetDevice` configuration from a JSON string.
+    pub fn from_json(json: &str) -> Result<Self, KeyboardError> {
+        serde_json::from_str(json).map_err(Into::into)
+    }
+
+    /// Save the device configuration to a JSON file.
+    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), KeyboardError> {
+        let json = self.to_json()?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+
+    /// Read and deserialize a device configuration from a JSON file.
+    pub fn read<P: AsRef<std::path::Path>>(path: P) -> Result<Self, KeyboardError> {
+        let content = std::fs::read_to_string(path)?;
+        Self::from_json(&content)
+    }
+
+    /// Alias for `save`.
+    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), KeyboardError> {
+        self.save(path)
+    }
+
+    /// Alias for `read`.
+    pub fn read_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, KeyboardError> {
+        Self::read(path)
+    }
+
     /// Is the HID device is currently open.
     pub fn is_hid_connected(&self) -> bool {
         self.device.is_some()
@@ -121,12 +153,12 @@ impl TargetDevice {
 
     /// Whether the MIDI port is open.
     pub fn is_midi_connected(&self) -> bool {
-        self.midi.is_some()
+        self.midi_link.is_some()
     }
 
     /// Name of the connected MIDI port, if any.
     pub fn midi_port_name(&self) -> Option<&str> {
-        self.midi.as_ref().map(|m| m.port_name.as_str())
+        self.midi_link.as_ref().map(|m| m.port_name.as_str())
     }
 
     /// Open the HID device and store the handle inside this struct.
@@ -169,8 +201,8 @@ impl TargetDevice {
 
     /// (Re)connect to the MIDI port matching [`Self::midi_port_filter`].
     pub fn open_midi(&mut self) -> Result<(), KeyboardError> {
-        self.midi = None;
-        self.midi = Some(midi::connect(&self.midi_port_filter)?);
+        self.midi_link = None;
+        self.midi_link = Some(midi::connect(&self.midi_port_filter)?);
         Ok(())
     }
 
@@ -335,7 +367,7 @@ impl TargetDevice {
         let mut events = Vec::new();
 
         // MIDI (keys, touch strips) - already buffered by the midir thread
-        if let Some(link) = &self.midi {
+        if let Some(link) = &self.midi_link {
             while let Ok(msg) = link.rx.try_recv() {
                 if let Some(ev) = midi::parse_message(&msg, self.first_note, self.keys) {
                     events.push(ev);
@@ -538,5 +570,48 @@ fn set_single_key_color(report: &mut [u8], key: usize, color: KeyColor) {
     let offset = 1 + key * 3;
     if offset + 3 <= report.len() {
         report[offset..offset + 3].copy_from_slice(&color.to_bytes());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serde_json_roundtrip() {
+        let dev = TargetDevice::default();
+        let json = dev.to_json().expect("Serialization failed");
+        let restored = TargetDevice::from_json(&json).expect("Deserialization failed");
+
+        assert_eq!(dev.name, restored.name);
+        assert_eq!(dev.keys, restored.keys);
+        assert_eq!(dev.vendor_id, restored.vendor_id);
+        assert_eq!(dev.product_id, restored.product_id);
+        assert_eq!(dev.keys_hightlight_color, restored.keys_hightlight_color);
+        assert_eq!(dev.keys_dim_color, restored.keys_dim_color);
+        assert_eq!(dev.response_color, restored.response_color);
+        // Skipped fields must preserve defaults:
+        assert_eq!(restored.report_size, 250);
+        assert_eq!(restored.key_leds_adress, 0x82);
+        assert_eq!(restored.first_note, 36);
+    }
+
+    #[test]
+    fn test_serde_file_save_and_read() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_targetdevice_config.json");
+
+        let mut dev = TargetDevice::default();
+        dev.name = "custom_keyboard".to_string();
+        dev.keys_hightlight_color = KeyColor::new(0, 255, 0);
+
+        dev.save(&file_path).expect("Failed to save to file");
+        let loaded = TargetDevice::read(&file_path).expect("Failed to read from file");
+
+        let _ = std::fs::remove_file(file_path);
+
+        assert_eq!(loaded.name, "custom_keyboard");
+        assert_eq!(loaded.keys_hightlight_color, KeyColor::new(0, 255, 0));
+        assert_eq!(loaded.report_size, 250);
     }
 }

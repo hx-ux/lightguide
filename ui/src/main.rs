@@ -1,7 +1,9 @@
 use backend::{
+    keyboard_key::{KeyboardKey, KeyboardKeyType},
     keycolor::KeyColor,
     targetdevice::TargetDevice,
-    utils::{HarmoniaUtils, KeyboardKey, KeyboardKeyType},
+    pitch_extension::StringExt,
+    pitch_extension::PITCH_CLASS_SELECTION,
 };
 use egui::ScrollArea;
 use harmonia::{PitchClass, ScaleKind};
@@ -70,7 +72,6 @@ impl eframe::App for LightGuideApp {
                 } else {
                     "Connect"
                 };
-                // Connect button
                 if ui.button(c_text).highlight().clicked() {
                     match self.device.open_hid_device() {
                         Ok(_) => {
@@ -87,13 +88,13 @@ impl eframe::App for LightGuideApp {
 
                 // Root pitch selector
                 egui::ComboBox::from_label("Root")
-                    .selected_text(HarmoniaUtils::normalize_pitch_names(&self.sel_pitch))
+                    .selected_text(&self.sel_pitch.display_text().to_string())
                     .show_ui(ui, |ui| {
-                        for note in HarmoniaUtils::PITCH_CLASS_SELECTION.iter() {
+                        for note in PITCH_CLASS_SELECTION.iter() {
                             ui.selectable_value(
                                 &mut self.sel_pitch,
                                 note.clone(),
-                                HarmoniaUtils::normalize_pitch_names(note),
+                                note.display_text().to_string(),
                             );
                         }
                     });

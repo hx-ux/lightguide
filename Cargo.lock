@@ -799,6 +799,8 @@ dependencies = [
  "clap",
  "harmonia",
  "hidapi",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

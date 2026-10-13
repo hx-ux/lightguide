@@ -9,6 +9,22 @@ pub enum KeyboardError {
     KeyboardNotConnected,
     InvalidScale,
     InvalidNote,
+    SerializationError(String),
+    IoError(String),
+}
+
+impl std::error::Error for KeyboardError {}
+
+impl From<std::io::Error> for KeyboardError {
+    fn from(err: std::io::Error) -> Self {
+        KeyboardError::IoError(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for KeyboardError {
+    fn from(err: serde_json::Error) -> Self {
+        KeyboardError::SerializationError(err.to_string())
+    }
 }
 
 impl fmt::Display for KeyboardError {
@@ -34,6 +50,12 @@ impl fmt::Display for KeyboardError {
             }
             KeyboardError::InvalidNote => {
                 write!(f, "The provided note is invalid")
+            }
+            KeyboardError::SerializationError(details) => {
+                write!(f, "Serialization error: {}", details)
+            }
+            KeyboardError::IoError(details) => {
+                write!(f, "IO error: {}", details)
             }
         }
     }

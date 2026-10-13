@@ -1,7 +1,7 @@
-use std::default;
+use serde::{Deserialize, Serialize};
 
 /// Simple RGB color for device LED control
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyColor {
     pub r: u8,
     pub g: u8,

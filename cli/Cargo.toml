@@ -13,3 +13,5 @@ clap = { version = "4", features = ["derive"] }
 harmonia = { workspace = true }
 hidapi = { workspace = true }
 backend = { path = "../backend" }
+serde = { workspace = true }
+serde_json = {workspace = true}

@@ -14,6 +14,10 @@ use crate::listen::AutomaticListenMode;
     about = "CLI controller for the NI Komplete Kontrol S49 MK1"
 )]
 struct Cli {
+    /// Optional path to a JSON configuration file
+    #[arg(short, long)]
+    config: Option<std::path::PathBuf>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -37,21 +41,43 @@ enum Commands {
         #[arg(long, default_value_t = 1.0)]
         value: f32,
     },
-    /// List all MIDI input ports (to find the keyboard's port name)
+    /// List all MIDI input ports
     MidiPorts,
-    /// Control the keyboard via the hardware itself (SCALE button toggles the mode)
     Automatic,
+    /// Save device configuration to a JSON file
+    SaveConfig {
+        #[arg(default_value = "config.json")]
+        path: std::path::PathBuf,
+    },
+    PrintConfig,
 }
 
 pub fn main() -> Result<(), KeyboardError> {
     let cli = Cli::parse();
 
-    let mut tg = TargetDevice::default();
+    let mut tg = match &cli.config {
+        Some(path) => {
+            println!("Loading config from {}", path.display());
+            TargetDevice::read(path)?
+        }
+        None => TargetDevice::default(),
+    };
+
+    match cli.command {
+        Commands::SaveConfig { path } => {
+            tg.save(&path)?;
+            println!("Configuration saved to {}", path.display());
+            return Ok(());
+        }
+        _ => {}
+    }
+
     // sudo chmod a+rw /dev/hidraw10
     // sudo chmod 600 /dev/hidraw10
     tg.open_hid_device_midi()?;
 
     match cli.command {
+        Commands::SaveConfig { .. } | Commands::PrintConfig => unreachable!(),
         Commands::Off => match tg.notes_off() {
             Ok(_) => println!("lights off"),
             Err(err) => println!("Err: {}", err),
