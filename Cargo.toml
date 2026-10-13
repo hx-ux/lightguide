@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "backend",
-    "cli", "rest_api",
+    "cli",
     "ui"
 ]
 resolver = "3"
