@@ -1,7 +1,9 @@
 use backend::{
+    keyboard_key::{KeyboardKey, KeyboardKeyType},
     keycolor::KeyColor,
+    pitch_extension::StringExt,
+    pitch_extension::PITCH_CLASS_SELECTION,
     targetdevice::TargetDevice,
-    utils::{HarmoniaUtils, KeyboardKey, KeyboardKeyType},
 };
 use egui::ScrollArea;
 use harmonia::{PitchClass, ScaleKind};
@@ -70,9 +72,8 @@ impl eframe::App for LightGuideApp {
                 } else {
                     "Connect"
                 };
-                // Connect button
                 if ui.button(c_text).highlight().clicked() {
-                    match self.device.open() {
+                    match self.device.open_hid_device() {
                         Ok(_) => {
                             self.is_connected = true;
                             let _ = self.device.notes_off();
@@ -87,13 +88,13 @@ impl eframe::App for LightGuideApp {
 
                 // Root pitch selector
                 egui::ComboBox::from_label("Root")
-                    .selected_text(HarmoniaUtils::normalize_pitch_names(&self.sel_pitch))
+                    .selected_text(&self.sel_pitch.display_text().to_string())
                     .show_ui(ui, |ui| {
-                        for note in HarmoniaUtils::pitch_class_selection().iter() {
+                        for note in PITCH_CLASS_SELECTION.iter() {
                             ui.selectable_value(
                                 &mut self.sel_pitch,
                                 note.clone(),
-                                HarmoniaUtils::normalize_pitch_names(note),
+                                note.display_text().to_string(),
                             );
                         }
                     });
@@ -138,7 +139,6 @@ impl eframe::App for LightGuideApp {
                 self.device.keys_hightlight_color,
             );
 
-            // Toggle log visibility
             if ui
                 .button(if self.show_log {
                     "Hide Log"
@@ -202,7 +202,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
 
         painter.rect_filled(outer_rect, egui::CornerRadius::ZERO, egui::Color32::WHITE);
 
-        if i.active {
+        if i.led_active {
             painter.rect_filled(
                 highlight_rect,
                 egui::CornerRadius::ZERO,
@@ -241,7 +241,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
 
             painter.rect_filled(outer_rect, egui::CornerRadius::ZERO, egui::Color32::BLACK);
 
-            if i.active {
+            if i.led_active {
                 painter.rect_filled(
                     highlight_rect,
                     egui::CornerRadius::ZERO,

@@ -1,9 +1,12 @@
-use backend::{
-    keycolor::KeyColor,
-    targetdevice::{KeyboardError, TargetDevice},
-};
+mod automatic;
+mod listen;
+use automatic::AutomaticMode;
+use backend::midi::list_midi_ports;
+use backend::targetdevice::TargetDevice;
+use backend::{display::TextAlignment, keyboard_error::KeyboardError};
 use clap::{Parser, Subcommand};
-use std::{thread, time::Duration};
+
+use crate::listen::AutomaticListenMode;
 
 #[derive(Parser)]
 #[command(
@@ -11,6 +14,10 @@ use std::{thread, time::Duration};
     about = "CLI controller for the NI Komplete Kontrol S49 MK1"
 )]
 struct Cli {
+    /// Optional path to a JSON configuration file
+    #[arg(short, long)]
+    config: Option<std::path::PathBuf>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -19,53 +26,93 @@ struct Cli {
 enum Commands {
     /// Turn off all key lights
     Off,
-    /// Highlight a musical scale on the keyboard
-    Scale {
-        #[arg(default_value = "C")]
-        root: String,
-        #[arg(default_value = "Ionian")]
-        scale: String,
+    /// Print all input events (buttons, keys, sliders, knobs)
+    Listen,
+    /// Show text on the displays (spread over all 9 displays, 2 rows with 8 chars per display )
+    Display {
+        #[arg(default_value = "Hello")]
+        upper_text: String,
+        #[arg(default_value = "World")]
+        lower_text: String,
     },
-    /// Poll the device and print raw input reports (keys, sliders, pitch, mod)
-    Listen {
-        /// Stop after N reports (0 = run forever)
-        #[arg(default_value_t = 0)]
-        count: usize,
+    Bar {
+        #[arg(long, default_value_t = 0)]
+        display: usize,
+        #[arg(long, default_value_t = 1.0)]
+        value: f32,
     },
-    /// Control the scale via the hardware itself
-    Automatic {},
+    /// List all MIDI input ports
+    MidiPorts,
+    Automatic,
+    /// Save device configuration to a JSON file
+    SaveConfig {
+        #[arg(default_value = "config.json")]
+        path: std::path::PathBuf,
+    },
+    PrintConfig,
 }
 
 pub fn main() -> Result<(), KeyboardError> {
     let cli = Cli::parse();
 
-    let mut tg = TargetDevice::default();
-    // sudo chmod a+rw /dev/hidraw10
-    // sudo chmod 600 /dev/hidraw10
-    tg.open()?;
+    let mut tg = match &cli.config {
+        Some(path) => {
+            println!("Loading config from {}", path.display());
+            TargetDevice::read(path)?
+        }
+        None => TargetDevice::default(),
+    };
 
     match cli.command {
-        Commands::Off => {
-            tg.notes_off()?;
-            println!("ok: lights off");
+        Commands::SaveConfig { path } => {
+            tg.save(&path)?;
+            println!("Configuration saved to {}", path.display());
+            return Ok(());
         }
-        Commands::Scale { root, scale } => {
-            let concat = format!("{} {}", root.trim().to_uppercase(), scale.trim());
-            tg.set_scale_string(concat)?;
-            tg.notes_off()?;
+        _ => {}
+    }
+
+    // sudo chmod a+rw /dev/hidraw10
+    // sudo chmod 600 /dev/hidraw10
+    tg.open_hid_device_midi()?;
+
+    match cli.command {
+        Commands::SaveConfig { .. } | Commands::PrintConfig => unreachable!(),
+        Commands::Off => match tg.notes_off() {
+            Ok(_) => println!("lights off"),
+            Err(err) => println!("Err: {}", err),
+        },
+        Commands::Listen => {
+            let mut listen = AutomaticListenMode::new();
+            println!("listen mode - press Ctrl+C to quit",);
+            let _ = listen.run_listen(&mut tg);
         }
-        Commands::Listen { count } => {
-            let mut n = 0;
-            loop {
-                tg.read_input()?;
-                n += 1;
-                if count != 0 && n >= count {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(10));
+        Commands::Display {
+            upper_text: top,
+            lower_text: bottom,
+        } => {
+            match tg.display_message_stretch(&top, &bottom, TextAlignment::Center) {
+                Ok(_) => println!("set text {} {}", top, bottom),
+                Err(err) => println!("Err: {}", err),
+            };
+        }
+        Commands::MidiPorts => {
+            match tg.midi_port_name() {
+                Some(name) => println!("MIDI port: {name}"),
+                None => println!("MIDI port not connected - no key/slider events"),
+            }
+            println!("Aviable ports");
+            for p in list_midi_ports()? {
+                println!("{p}");
             }
         }
-        Commands::Automatic {} => {}
+        Commands::Automatic => {
+            let mut automatic = AutomaticMode::new();
+
+            println!("automatic mode - press SCALE to toggle Performance / Scale, Ctrl+C to quit",);
+            automatic.run(&mut tg)?;
+        }
+        Commands::Bar { display, value } => tg.display_bar(display, value)?,
     }
     Ok(())
 }
