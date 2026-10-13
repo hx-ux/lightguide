@@ -37,8 +37,6 @@ pub struct TargetDevice {
     // #[serde(skip)]
     #[serde(with = "pitch_serde")]
     pub root_note: PitchClass,
-    // #[serde(skip)]
-    // #[serde(default = "default_scale")]
     #[serde(with = "scale_serde")]
     pub scale: ScaleKind,
     /// Case-insensitive substring used to find the keyboard's MIDI port

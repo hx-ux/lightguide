@@ -1,9 +1,9 @@
 use backend::{
     keyboard_key::{KeyboardKey, KeyboardKeyType},
     keycolor::KeyColor,
-    targetdevice::TargetDevice,
     pitch_extension::StringExt,
     pitch_extension::PITCH_CLASS_SELECTION,
+    targetdevice::TargetDevice,
 };
 use egui::ScrollArea;
 use harmonia::{PitchClass, ScaleKind};
@@ -139,7 +139,6 @@ impl eframe::App for LightGuideApp {
                 self.device.keys_hightlight_color,
             );
 
-            // Toggle log visibility
             if ui
                 .button(if self.show_log {
                     "Hide Log"

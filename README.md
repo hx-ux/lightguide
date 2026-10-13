@@ -5,18 +5,12 @@ Currently, only the Komplete Kontrol S49 MK1 is supported
 
 ## Features
 
-- Display Scales
-- Change Key-Colors
+- Change key-colors
 - Callbacks for buttons, keys, sliders (touch strips / pedals) and knobs
-- Text on the 9 displays
+- Show text and value bars on the displays
+- Standalone **Automatic Mode**, which tries to recreate the bevahiour fo the **Komplete Kontrol** software
 
-## Run
-
-```
-cargo run --bin Lightguide_CLI
-```
-
-Test commands:
+## Test the keyboard
 
 ```
 cargo run --bin Lightguide_CLI -- listen           # print all input events
@@ -24,11 +18,28 @@ cargo run --bin Lightguide_CLI -- display "HELLO" "WORLD"
 cargo run --bin Lightguide_CLI -- midi-ports       # list MIDI inputs
 ```
 
+## Automatic Mode
+
+You can run the automatic mode via
+`cargo run -p cli -- automatic`
+
+you can also create your own config
+`cargo run -p cli -- save-config config.json`
+
+And then run the automatic mode with it
+`cargo run -p cli -- --config config.json automatic`
+
+## Raspberry Pi
+
 On the Raspberry Pi the MIDI support needs the ALSA headers:
 
-```
+```bash
 sudo apt install libasound2-dev
+sudo apt-get install libudev-dev
 ```
+
+Then, set read/write/ permissions for your device
+`sudo chmod a+rw /dev/hidraw0`
 
 ## Library usage
 
