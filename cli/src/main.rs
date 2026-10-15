@@ -22,7 +22,7 @@ struct Cli {
     command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, PartialEq)]
 enum Commands {
     /// Turn off all key lights
     Off,
@@ -72,9 +72,14 @@ pub fn main() -> Result<(), KeyboardError> {
         _ => {}
     }
 
-    // sudo chmod a+rw /dev/hidraw10
-    // sudo chmod 600 /dev/hidraw10
-    tg.open_hid_device_midi()?;
+    if matches!(
+        cli.command,
+        Commands::Off | Commands::Listen | Commands::Display { .. } | Commands::Automatic
+    ) {
+        // sudo chmod a+rw /dev/hidraw10
+        // sudo chmod 600 /dev/hidraw10
+        tg.open_hid_device()?;
+    }
 
     match cli.command {
         Commands::SaveConfig { .. } | Commands::PrintConfig => unreachable!(),
@@ -97,10 +102,6 @@ pub fn main() -> Result<(), KeyboardError> {
             };
         }
         Commands::MidiPorts => {
-            match tg.midi_port_name() {
-                Some(name) => println!("MIDI port: {name}"),
-                None => println!("MIDI port not connected - no key/slider events"),
-            }
             println!("Aviable ports");
             for p in list_midi_ports()? {
                 println!("{p}");
@@ -110,9 +111,9 @@ pub fn main() -> Result<(), KeyboardError> {
             let mut automatic = AutomaticMode::new();
 
             println!("automatic mode - press SCALE to toggle Performance / Scale, Ctrl+C to quit",);
-            match tg.open_midi_out("Steinberg UR22 Port1") {
-                Ok(_) => println!("MIDI out connected",),
-                Err(e) => eprintln!("warning: failed to open MIDI out  {e}"),
+            match tg.open_midi_out(&tg.midi_out_device.to_string()) {
+                Ok(_) => println!("MIDI out connected to {}", &tg.midi_out_device.to_string()),
+                Err(e) => eprintln!("{e}"),
             }
             automatic.run(&mut tg)?;
         }

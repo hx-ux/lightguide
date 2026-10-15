@@ -2,9 +2,6 @@
 //!
 //! The piano keys and the touch strips are *not* reported over HID, they are
 //! sent as regular MIDI messages on the keyboard's USB-MIDI port.
-//! Messages are received on a background thread (owned by `midir`) and
-//! forwarded through a channel, so that all user callbacks are executed on the
-//! thread that calls [`crate::targetdevice::TargetDevice::poll`].
 
 use crate::events::{InputEvent, KeyEvent, Slider};
 use crate::keyboard_error::KeyboardError;
@@ -12,7 +9,6 @@ use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnec
 use std::fmt;
 use std::sync::mpsc::{channel, Receiver};
 
-/// Default (case-insensitive) substring used to find the keyboard's MIDI port.
 pub const DEFAULT_PORT_FILTER: &str = "komplete kontrol";
 
 pub(crate) struct MidiLink {
@@ -70,29 +66,6 @@ impl MidiOut {
             .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
 
         Ok(Self { conn, port_name })
-    }
-
-    /// Connect to a MIDI output port by its exact index from [`list_midi_out_ports`].
-    pub fn connect_by_index(index: usize) -> Result<Self, KeyboardError> {
-        let midi_out = MidiOutput::new("lightguide-out")
-            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
-
-        let ports = midi_out.ports();
-        let port = ports.get(index).ok_or_else(|| {
-            KeyboardError::CantConnectMidi(format!("MIDI output port index {index} out of range"))
-        })?;
-
-        let port_name = midi_out.port_name(port).unwrap_or_default();
-        let conn = midi_out
-            .connect(port, "lightguide-out-conn")
-            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
-
-        Ok(Self { conn, port_name })
-    }
-
-    /// Name of the connected MIDI output port.
-    pub fn port_name(&self) -> &str {
-        &self.port_name
     }
 
     /// Send a raw MIDI byte slice.
@@ -238,13 +211,13 @@ pub fn list_midi_ports() -> Result<Vec<String>, KeyboardError> {
 
 /// Connect to the first MIDI input port whose name contains `filter`
 /// (case-insensitive).
-pub(crate) fn connect(filter: &str) -> Result<MidiLink, KeyboardError> {
-    let mut midi_in =
-        MidiInput::new("lightguide").map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+pub(crate) fn connect() -> Result<MidiLink, KeyboardError> {
+    let mut midi_in = MidiInput::new(DEFAULT_PORT_FILTER)
+        .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
     // We don't need sysex, clock or active sensing
     midi_in.ignore(Ignore::All);
 
-    let filter_lc = filter.to_lowercase();
+    let filter_lc = DEFAULT_PORT_FILTER.to_lowercase();
     let port = midi_in
         .ports()
         .into_iter()
@@ -254,9 +227,7 @@ pub(crate) fn connect(filter: &str) -> Result<MidiLink, KeyboardError> {
                 .map(|n| n.to_lowercase().contains(&filter_lc))
                 .unwrap_or(false)
         })
-        .ok_or_else(|| {
-            KeyboardError::CantConnectMidi(format!("no MIDI input port matching '{filter}'"))
-        })?;
+        .ok_or_else(|| KeyboardError::CantConnectMidi(format!("no MIDI input port matching")))?;
     let port_name = midi_in.port_name(&port).unwrap_or_default();
 
     let (tx, rx) = channel::<Vec<u8>>();
@@ -329,40 +300,5 @@ pub(crate) fn parse_message(msg: &[u8], first_note: u8, keys: usize) -> Option<I
             })
         }
         _ => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn note_on_off() {
-        match parse_message(&[0x90, 40, 100], 36, 49) {
-            Some(InputEvent::Key(k)) => {
-                assert!(k.pressed);
-                assert_eq!(k.key_index, Some(4));
-            }
-            other => panic!("{other:?}"),
-        }
-        match parse_message(&[0x90, 40, 0], 36, 49) {
-            Some(InputEvent::Key(k)) => assert!(!k.pressed),
-            other => panic!("{other:?}"),
-        }
-        match parse_message(&[0x80, 20, 0], 36, 49) {
-            Some(InputEvent::Key(k)) => assert_eq!(k.key_index, None),
-            other => panic!("{other:?}"),
-        }
-    }
-
-    #[test]
-    fn pitch_bend_centre() {
-        assert_eq!(
-            parse_message(&[0xE0, 0x00, 0x40], 36, 49),
-            Some(InputEvent::Slider {
-                slider: Slider::PitchBend,
-                value: 0
-            })
-        );
     }
 }

@@ -18,8 +18,7 @@
         "g": 255,
         "b": 255
     },
-    "root_note": "C#",
-    "scale": "Dorian",
-    "midi_port_filter": "komplete kontrol",
-    "setup_midi": true
+    "root_note": "C",
+    "scale": "Ionian (major)",
+    "midi_out_device": "KOMPLETE KONTROL S49 Anschluss 2"
 }

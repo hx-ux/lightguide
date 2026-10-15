@@ -34,20 +34,15 @@ pub struct TargetDevice {
     pub response_color: KeyColor,
     #[serde(skip)]
     device: Option<HidDevice>,
-    // #[serde(skip)]
     #[serde(with = "pitch_serde")]
     pub root_note: PitchClass,
     #[serde(with = "scale_serde")]
     pub scale: ScaleKind,
-    /// Case-insensitive substring used to find the keyboard's MIDI port
-    pub midi_port_filter: String,
-    /// MIDI note of the left-most key (updated from the HID report on octave shift)
     #[serde(skip)]
     pub first_note: u8,
     #[serde(skip)]
-    midi_link: Option<MidiLink>,
-    setup_midi: bool,
-    // see midi options
+    midi_out_link: Option<MidiLink>,
+    pub midi_out_device: String,
     #[serde(skip)]
     midi_out: Option<midi::MidiOut>,
     #[serde(skip)]
@@ -75,11 +70,9 @@ impl Default for TargetDevice {
             device: None,
             root_note: PitchClass::C,
             scale: ScaleKind::Ionian,
-            midi_port_filter: midi::DEFAULT_PORT_FILTER.to_string(),
-            // S49: C2 .. C6 without octave shift
             first_note: 36,
-            midi_link: None,
-            setup_midi: true,
+            midi_out_link: None,
+            midi_out_device: "KOMPLETE KONTROL S49 Anschluss 2".to_string(),
             callbacks: Callbacks::default(),
             button_state: [0; BUTTON_BYTES],
             encoder_state: None,
@@ -155,12 +148,12 @@ impl TargetDevice {
 
     /// Whether the MIDI port is open.
     pub fn is_midi_connected(&self) -> bool {
-        self.midi_link.is_some()
+        self.midi_out_link.is_some()
     }
 
     /// Name of the connected MIDI port, if any.
     pub fn midi_port_name(&self) -> Option<&str> {
-        self.midi_link.as_ref().map(|m| m.port_name.as_str())
+        self.midi_out_link.as_ref().map(|m| m.port_name.as_str())
     }
 
     /// Open the HID device and store the handle inside this struct.
@@ -195,16 +188,10 @@ impl TargetDevice {
         Ok(())
     }
 
-    pub fn open_hid_device_midi(&mut self) -> Result<(), KeyboardError> {
-        self.open_hid_device()?;
-        self.open_midi()?;
-        Ok(())
-    }
-
-    /// (Re)connect to the MIDI port matching [`Self::midi_port_filter`].
+    /// Open In
     pub fn open_midi(&mut self) -> Result<(), KeyboardError> {
-        self.midi_link = None;
-        self.midi_link = Some(midi::connect(&self.midi_port_filter)?);
+        self.midi_out_link = None;
+        self.midi_out_link = Some(midi::connect()?);
         Ok(())
     }
     /// Connect to a MIDI output port matching `filter` (case-insensitive).
@@ -379,7 +366,7 @@ impl TargetDevice {
         let mut events = Vec::new();
 
         // MIDI (keys, touch strips) - already buffered by the midir thread
-        if let Some(link) = &self.midi_link {
+        if let Some(link) = &self.midi_out_link {
             while let Ok(msg) = link.rx.try_recv() {
                 if let Some(ev) = midi::parse_message(&msg, self.first_note, self.keys) {
                     events.push(ev);
