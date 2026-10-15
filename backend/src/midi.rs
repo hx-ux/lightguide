@@ -11,10 +11,10 @@ use std::sync::mpsc::{channel, Receiver};
 
 pub const DEFAULT_PORT_FILTER: &str = "komplete kontrol";
 
-pub(crate) struct MidiLink {
+pub struct MidiLink {
     _conn: MidiInputConnection<()>,
-    pub(crate) rx: Receiver<Vec<u8>>,
-    pub(crate) port_name: String,
+    pub rx: Receiver<Vec<u8>>,
+    pub port_name: String,
 }
 
 impl fmt::Debug for MidiLink {
@@ -22,6 +22,74 @@ impl fmt::Debug for MidiLink {
         f.debug_struct("MidiLink")
             .field("port_name", &self.port_name)
             .finish()
+    }
+}
+
+impl MidiLink {
+    pub fn connect(filter: &str) -> Result<Self, KeyboardError> {
+        Self::connect_with_ignore("lightguide-in", filter, Ignore::None)
+    }
+
+    /// Connect with a custom client name and ignore mask.
+    pub fn connect_with_ignore(
+        client_name: &str,
+        filter: &str,
+        ignore: Ignore,
+    ) -> Result<Self, KeyboardError> {
+        if filter.trim().is_empty() {
+            return Err(KeyboardError::CantConnectMidi(
+                "MIDI input device filter cannot be empty".to_string(),
+            ));
+        }
+
+        let mut midi_in = MidiInput::new(client_name)
+            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+        midi_in.ignore(ignore);
+
+        let filter_lc = filter.to_lowercase();
+        let port = midi_in
+            .ports()
+            .into_iter()
+            .find(|p| {
+                midi_in
+                    .port_name(p)
+                    .map(|n| n.to_lowercase().contains(&filter_lc))
+                    .unwrap_or(false)
+            })
+            .ok_or_else(|| {
+                let available = midi_in
+                    .ports()
+                    .iter()
+                    .filter_map(|p| midi_in.port_name(p).ok())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                KeyboardError::CantConnectMidi(format!(
+                    "no MIDI input port matching '{filter}'. Available input ports: [{available}]"
+                ))
+            })?;
+
+        let port_name = midi_in.port_name(&port).unwrap_or_default();
+        let (tx, rx) = channel::<Vec<u8>>();
+        let conn = midi_in
+            .connect(
+                &port,
+                client_name,
+                move |_stamp, message, _| {
+                    let _ = tx.send(message.to_vec());
+                },
+                (),
+            )
+            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+
+        Ok(Self {
+            _conn: conn,
+            rx,
+            port_name,
+        })
+    }
+
+    pub fn port_name(&self) -> &str {
+        &self.port_name
     }
 }
 
@@ -43,6 +111,12 @@ impl MidiOut {
     /// Connect to the first MIDI output port whose name contains `filter`
     /// (case-insensitive).
     pub fn connect(filter: &str) -> Result<Self, KeyboardError> {
+        if filter.trim().is_empty() {
+            return Err(KeyboardError::CantConnectMidi(
+                "MIDI output device filter cannot be empty".to_string(),
+            ));
+        }
+
         let midi_out = MidiOutput::new("lightguide-out")
             .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
 
@@ -57,7 +131,15 @@ impl MidiOut {
                     .unwrap_or(false)
             })
             .ok_or_else(|| {
-                KeyboardError::CantConnectMidi(format!("no MIDI output port matching '{filter}'"))
+                let available = midi_out
+                    .ports()
+                    .iter()
+                    .filter_map(|p| midi_out.port_name(p).ok())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                KeyboardError::CantConnectMidi(format!(
+                    "no MIDI output port matching '{filter}'. Available output ports: [{available}]"
+                ))
             })?;
 
         let port_name = midi_out.port_name(&port).unwrap_or_default();
@@ -66,6 +148,10 @@ impl MidiOut {
             .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
 
         Ok(Self { conn, port_name })
+    }
+
+    pub fn port_name(&self) -> &str {
+        &self.port_name
     }
 
     /// Send a raw MIDI byte slice.
@@ -209,44 +295,62 @@ pub fn list_midi_ports() -> Result<Vec<String>, KeyboardError> {
         .collect())
 }
 
-/// Connect to the first MIDI input port whose name contains `filter`
-/// (case-insensitive).
-pub(crate) fn connect() -> Result<MidiLink, KeyboardError> {
-    let mut midi_in = MidiInput::new(DEFAULT_PORT_FILTER)
-        .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
-    // We don't need sysex, clock or active sensing
-    midi_in.ignore(Ignore::All);
+// /// Connect to the keyboard's default MIDI input port.
+// #[allow(dead_code)]
+// pub(crate) fn connect() -> Result<MidiLink, KeyboardError> {
+//     MidiLink::connect_with_ignore("lightguide-keyboard", DEFAULT_PORT_FILTER, Ignore::All)
+// }
 
-    let filter_lc = DEFAULT_PORT_FILTER.to_lowercase();
-    let port = midi_in
-        .ports()
-        .into_iter()
-        .find(|p| {
-            midi_in
-                .port_name(p)
-                .map(|n| n.to_lowercase().contains(&filter_lc))
-                .unwrap_or(false)
+/// A standalone MIDI merger that merges events from an external MIDI input
+/// and an optional keyboard MIDI input into a single MIDI output.
+pub struct MidiMerger {
+    pub keyboard_link: Option<MidiLink>,
+    pub input_link: MidiLink,
+    pub output: MidiOut,
+}
+
+impl MidiMerger {
+    /// Create a new merger by connecting to output, input, and optionally keyboard.
+    pub fn new(
+        keyboard_filter: Option<&str>,
+        input_filter: &str,
+        output_filter: &str,
+    ) -> Result<Self, KeyboardError> {
+        let output = MidiOut::connect(output_filter)?;
+        let input_link = MidiLink::connect(input_filter)?;
+        let keyboard_link = if let Some(kf) = keyboard_filter {
+            if !kf.trim().is_empty() {
+                MidiLink::connect(kf).ok()
+            } else {
+                None
+            }
+        } else {
+            MidiLink::connect(DEFAULT_PORT_FILTER).ok()
+        };
+
+        Ok(Self {
+            keyboard_link,
+            input_link,
+            output,
         })
-        .ok_or_else(|| KeyboardError::CantConnectMidi(format!("no MIDI input port matching")))?;
-    let port_name = midi_in.port_name(&port).unwrap_or_default();
+    }
 
-    let (tx, rx) = channel::<Vec<u8>>();
-    let conn = midi_in
-        .connect(
-            &port,
-            "lightguide-in",
-            move |_stamp, message, _| {
-                let _ = tx.send(message.to_vec());
-            },
-            (),
-        )
-        .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
-
-    Ok(MidiLink {
-        _conn: conn,
-        rx,
-        port_name,
-    })
+    /// Forward any pending MIDI messages from all inputs directly to the output.
+    /// Returns the total number of forwarded messages.
+    pub fn poll(&mut self) -> Result<usize, KeyboardError> {
+        let mut count = 0;
+        if let Some(kb) = &self.keyboard_link {
+            while let Ok(msg) = kb.rx.try_recv() {
+                self.output.send_raw(&msg)?;
+                count += 1;
+            }
+        }
+        while let Ok(msg) = self.input_link.rx.try_recv() {
+            self.output.send_raw(&msg)?;
+            count += 1;
+        }
+        Ok(count)
+    }
 }
 
 /// Translate one raw MIDI message into an [`InputEvent`].

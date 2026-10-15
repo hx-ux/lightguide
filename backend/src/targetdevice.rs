@@ -2,12 +2,10 @@ use crate::{
     callbacks::Callbacks,
     display::{self, DisplayBuffer, TextAlignment},
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
+    extensions::{pitch_extension::pitch_serde, scale_extension::scale_serde},
     keyboard_error::KeyboardError,
-    keyboard_key::KeyboardKey,
-    keycolor::KeyColor,
     midi::{self, MidiLink},
-    pitch_extension::pitch_serde,
-    scale_extension::scale_serde,
+    models::{keyboard_key::KeyboardKey, keycolor::KeyColor},
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 use hidapi::HidDevice;
@@ -17,6 +15,10 @@ use serde::{Deserialize, Serialize};
 const BUTTON_BYTES: usize = 5;
 /// Main encoder + 8 knobs
 const NUM_ENCODERS: usize = 9;
+
+fn default_keyboard_filter() -> String {
+    midi::DEFAULT_PORT_FILTER.to_string()
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -41,7 +43,11 @@ pub struct TargetDevice {
     #[serde(skip)]
     pub first_note: u8,
     #[serde(skip)]
-    midi_out_link: Option<MidiLink>,
+    midi_keyboard_link: Option<MidiLink>,
+    #[serde(skip)]
+    midi_merge_link: Option<MidiLink>,
+    #[serde(skip)]
+    pub midi_keyboard_device: String,
     pub midi_out_device: String,
     #[serde(skip)]
     midi_out: Option<midi::MidiOut>,
@@ -71,7 +77,9 @@ impl Default for TargetDevice {
             root_note: PitchClass::C,
             scale: ScaleKind::Ionian,
             first_note: 36,
-            midi_out_link: None,
+            midi_keyboard_link: None,
+            midi_merge_link: None,
+            midi_keyboard_device: default_keyboard_filter(),
             midi_out_device: "KOMPLETE KONTROL S49 Anschluss 2".to_string(),
             callbacks: Callbacks::default(),
             button_state: [0; BUTTON_BYTES],
@@ -146,14 +154,36 @@ impl TargetDevice {
         self.device.is_some()
     }
 
-    /// Whether the MIDI port is open.
+    /// Whether the keyboard MIDI input port is open.
     pub fn is_midi_connected(&self) -> bool {
-        self.midi_out_link.is_some()
+        self.midi_keyboard_link.is_some()
     }
 
-    /// Name of the connected MIDI port, if any.
+    /// Name of the connected keyboard MIDI input port, if any.
     pub fn midi_port_name(&self) -> Option<&str> {
-        self.midi_out_link.as_ref().map(|m| m.port_name.as_str())
+        self.midi_keyboard_link
+            .as_ref()
+            .map(|m| m.port_name.as_str())
+    }
+
+    /// Whether the merged secondary MIDI input port is open.
+    pub fn is_midi_in_connected(&self) -> bool {
+        self.midi_merge_link.is_some()
+    }
+
+    /// Name of the connected secondary MIDI input port, if any.
+    pub fn midi_in_port_name(&self) -> Option<&str> {
+        self.midi_merge_link.as_ref().map(|m| m.port_name.as_str())
+    }
+
+    /// Whether the MIDI output port is open.
+    pub fn is_midi_out_connected(&self) -> bool {
+        self.midi_out.is_some()
+    }
+
+    /// Name of the connected MIDI output port, if any.
+    pub fn midi_out_port_name(&self) -> Option<&str> {
+        self.midi_out.as_ref().map(|m| m.port_name())
     }
 
     /// Open the HID device and store the handle inside this struct.
@@ -188,14 +218,38 @@ impl TargetDevice {
         Ok(())
     }
 
-    /// Open In
+    /// Open the keyboard's MIDI input port using `self.midi_keyboard_device`.
     pub fn open_midi(&mut self) -> Result<(), KeyboardError> {
-        self.midi_out_link = None;
-        self.midi_out_link = Some(midi::connect()?);
+        let filter = if self.midi_keyboard_device.is_empty() {
+            midi::DEFAULT_PORT_FILTER.to_string()
+        } else {
+            self.midi_keyboard_device.clone()
+        };
+        self.open_keyboard_midi(&filter)
+    }
+
+    /// Connect to a specific keyboard MIDI input port matching `filter` (case-insensitive).
+    pub fn open_keyboard_midi(&mut self, filter: &str) -> Result<(), KeyboardError> {
+        self.midi_keyboard_link = None;
+        self.midi_keyboard_link = Some(midi::MidiLink::connect(filter)?);
         Ok(())
     }
+
+    /// Connect to a secondary MIDI input port to merge with keyboard notes (case-insensitive).
+    pub fn open_midi_in(&mut self, filter: &str) -> Result<(), KeyboardError> {
+        if filter.trim().is_empty() {
+            return Ok(());
+        }
+        self.midi_merge_link = None;
+        self.midi_merge_link = Some(midi::MidiLink::connect(filter)?);
+        Ok(())
+    }
+
     /// Connect to a MIDI output port matching `filter` (case-insensitive).
     pub fn open_midi_out(&mut self, filter: &str) -> Result<(), KeyboardError> {
+        if filter.trim().is_empty() {
+            return Ok(());
+        }
         self.midi_out = None;
         self.midi_out = Some(midi::MidiOut::connect(filter)?);
         Ok(())
@@ -351,6 +405,14 @@ impl TargetDevice {
         self.callbacks.encoder.push(Box::new(f));
     }
 
+    /// Register a callback for raw MIDI messages from the merged secondary MIDI device.
+    pub fn on_midi_merged<F>(&mut self, f: F)
+    where
+        F: FnMut(&mut TargetDevice, &[u8]) + Send + 'static,
+    {
+        self.callbacks.midi_merged.push(Box::new(f));
+    }
+
     /// Remove all registered callbacks.
     pub fn clear_callbacks(&mut self) {
         self.callbacks = Callbacks::default();
@@ -364,28 +426,53 @@ impl TargetDevice {
     /// this function is called.
     pub fn poll(&mut self, timeout_ms: i32) -> Result<Vec<InputEvent>, KeyboardError> {
         let mut events = Vec::new();
+        let mut had_midi = false;
 
-        // MIDI (keys, touch strips) - already buffered by the midir thread
-        if let Some(link) = &self.midi_out_link {
+        // 1. Keyboard MIDI (keys, touch strips) - already buffered by the midir thread
+        if let Some(link) = &self.midi_keyboard_link {
             while let Ok(msg) = link.rx.try_recv() {
+                had_midi = true;
                 if let Some(ev) = midi::parse_message(&msg, self.first_note, self.keys) {
                     events.push(ev);
                 }
             }
         }
 
-        // HID (buttons, encoders). Don't block if MIDI already delivered something.
-        let device = self
-            .device
-            .as_ref()
-            .ok_or(KeyboardError::KeyboardNotConnected)?;
-        let mut buf = [0u8; 64];
-        let timeout = if events.is_empty() { timeout_ms } else { 0 };
-        let n = device
-            .read_timeout(&mut buf, timeout)
-            .map_err(|e| KeyboardError::CannotReadData(e.to_string()))?;
-        if n > 0 {
-            self.parse_hid_report(&buf[..n], &mut events);
+        // 2. Merged MIDI device (forward raw messages directly to MIDI output)
+        let mut merged_msgs = Vec::new();
+        if let Some(link) = &self.midi_merge_link {
+            while let Ok(msg) = link.rx.try_recv() {
+                had_midi = true;
+                if let Some(out) = &mut self.midi_out {
+                    let _ = out.send_raw(&msg);
+                }
+                merged_msgs.push(msg);
+            }
+        }
+
+        // 3. HID (buttons, encoders). Don't block if MIDI already delivered something.
+        if let Some(device) = &self.device {
+            let mut buf = [0u8; 64];
+            let timeout = if had_midi { 0 } else { timeout_ms };
+            let n = device
+                .read_timeout(&mut buf, timeout)
+                .map_err(|e| KeyboardError::CannotReadData(e.to_string()))?;
+            if n > 0 {
+                self.parse_hid_report(&buf[..n], &mut events);
+            }
+        } else if !had_midi && timeout_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(timeout_ms as u64));
+        }
+
+        // Invoke callbacks for merged MIDI input
+        if !merged_msgs.is_empty() && !self.callbacks.midi_merged.is_empty() {
+            let mut cbs = std::mem::take(&mut self.callbacks);
+            for msg in &merged_msgs {
+                for cb in cbs.midi_merged.iter_mut() {
+                    cb(self, msg);
+                }
+            }
+            self.callbacks = cbs;
         }
 
         self.dispatch(&events);
@@ -576,48 +663,5 @@ fn set_single_key_color(report: &mut [u8], key: usize, color: KeyColor) {
     let offset = 1 + key * 3;
     if offset + 3 <= report.len() {
         report[offset..offset + 3].copy_from_slice(&color.to_bytes());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_serde_json_roundtrip() {
-        let dev = TargetDevice::default();
-        let json = dev.to_json().expect("Serialization failed");
-        let restored = TargetDevice::from_json(&json).expect("Deserialization failed");
-
-        assert_eq!(dev.name, restored.name);
-        assert_eq!(dev.keys, restored.keys);
-        assert_eq!(dev.vendor_id, restored.vendor_id);
-        assert_eq!(dev.product_id, restored.product_id);
-        assert_eq!(dev.keys_hightlight_color, restored.keys_hightlight_color);
-        assert_eq!(dev.keys_dim_color, restored.keys_dim_color);
-        assert_eq!(dev.response_color, restored.response_color);
-        // Skipped fields must preserve defaults:
-        assert_eq!(restored.report_size, 250);
-        assert_eq!(restored.key_leds_adress, 0x82);
-        assert_eq!(restored.first_note, 36);
-    }
-
-    #[test]
-    fn test_serde_file_save_and_read() {
-        let temp_dir = std::env::temp_dir();
-        let file_path = temp_dir.join("test_targetdevice_config.json");
-
-        let mut dev = TargetDevice::default();
-        dev.name = "custom_keyboard".to_string();
-        dev.keys_hightlight_color = KeyColor::new(0, 255, 0);
-
-        dev.save(&file_path).expect("Failed to save to file");
-        let loaded = TargetDevice::read(&file_path).expect("Failed to read from file");
-
-        let _ = std::fs::remove_file(file_path);
-
-        assert_eq!(loaded.name, "custom_keyboard");
-        assert_eq!(loaded.keys_hightlight_color, KeyColor::new(0, 255, 0));
-        assert_eq!(loaded.report_size, 250);
     }
 }

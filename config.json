@@ -20,5 +20,6 @@
     },
     "root_note": "C",
     "scale": "Ionian (major)",
-    "midi_out_device": "KOMPLETE KONTROL S49 Anschluss 2"
+    "midi_in_device": "",
+    "midi_out_device": "ESI MIDIMATE eX Port 1"
 }
