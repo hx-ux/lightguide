@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use backend::{
     display::TextAlignment,
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
+    extensions::pitch_extension::StringExt,
     keyboard_error::KeyboardError,
-    keycolor::KeyColor,
+    models::keycolor::KeyColor,
     targetdevice::TargetDevice,
-    pitch_extension::StringExt,
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
+
+use crate::modes::automatic_modes::Mode;
 
 /// Number of endless knobs above the displays
 pub const NUM_KNOBS: usize = 8;
@@ -20,22 +22,6 @@ const TICKS_PER_STEP: f32 = 4.0;
 const TICKS_PER_STEP_FINE: f32 = 32.0;
 /// Display offset: knob n is shown on display n + DISPLAY_OFFSET
 const DISPLAY_OFFSET: usize = 1;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Mode {
-    #[default]
-    Performance,
-    Scale,
-}
-
-impl Mode {
-    fn toggled(self) -> Self {
-        match self {
-            Mode::Performance => Mode::Scale,
-            Mode::Scale => Mode::Performance,
-        }
-    }
-}
 
 pub struct AutomaticMode {
     mode: Mode,
@@ -87,7 +73,13 @@ impl AutomaticMode {
                 slider: Slider::Sustain,
                 value,
             } => self.on_sustain(tg, value),
-            InputEvent::Slider { .. } => Ok(()),
+            InputEvent::Slider { slider, value } => {
+                // Emulate the slider midi values
+                if let Some(out) = tg.midi_out_mut() {
+                    let _ = out.send_input_event(&InputEvent::Slider { slider, value });
+                }
+                Ok(())
+            }
         }
     }
 

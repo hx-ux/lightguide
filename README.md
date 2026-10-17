@@ -8,25 +8,28 @@ Currently, only the Komplete Kontrol S49 MK1 is supported
 - Change key-colors
 - Callbacks for buttons, keys, sliders (touch strips / pedals) and knobs
 - Show text and value bars on the displays
-- Standalone **Automatic Mode**, which tries to recreate the bevahiour fo the **Komplete Kontrol** software
+- Standalone **Automatic Mode**, which tries to recreate the behaviour of the **Komplete Kontrol** software
+- **Midi Output**, supports midi output via
+    - Built-In Midi Port
+    - External Midi Interface
 
 ## Test the keyboard
 
-```
+```bash
 cargo run --bin Lightguide_CLI -- listen           # print all input events
 cargo run --bin Lightguide_CLI -- display "HELLO" "WORLD"
-cargo run --bin Lightguide_CLI -- midi-ports       # list MIDI inputs
+cargo run --bin Lightguide_CLI -- midi-ports       # list all MIDI inputs & outputs
 ```
 
 ## Automatic Mode
 
-You can run the automatic mode via
+You can run the automatic mode via:
 `cargo run -p cli -- automatic`
 
-you can also create your own config
+You can also create your own config:
 `cargo run -p cli -- save-config config.json`
 
-And then run the automatic mode with it
+And run automatic mode with it
 `cargo run -p cli -- --config config.json automatic`
 
 ## Raspberry Pi

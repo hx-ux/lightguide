@@ -1,10 +1,8 @@
 pub mod callbacks;
 pub mod display;
 pub mod events;
+pub mod extensions;
 pub mod keyboard_error;
-pub mod keyboard_key;
-pub mod keycolor;
 pub mod midi;
-pub mod pitch_extension;
-pub mod scale_extension;
+pub mod models;
 pub mod targetdevice;

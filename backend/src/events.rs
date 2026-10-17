@@ -6,7 +6,6 @@ pub enum Button {
     TouchEncoder(u8),
     /// Touching the main encoder
     TouchEncoderMain,
-
     PresetUp,
     Enter,
     PresetDown,
@@ -14,7 +13,6 @@ pub enum Button {
     Instance,
     OctaveDown,
     OctaveUp,
-
     Stop,
     Rec,
     Play,
@@ -23,7 +21,6 @@ pub enum Button {
     NavigateLeft,
     Back,
     NavigateUp,
-
     Shift,
     Scale,
     Arp,
@@ -32,13 +29,11 @@ pub enum Button {
     PageLeft,
     Rwd,
     Ffw,
-
-    /// Bit that is set in the report but not mapped (yet)
+    /// Not mapped bits
     Unknown(u8),
 }
 
 impl Button {
-    /// Map a bit index of the HID button bitfield to a [`Button`].
     pub fn from_bit(bit: u8) -> Self {
         use Button::*;
         match bit {

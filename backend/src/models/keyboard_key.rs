@@ -1,6 +1,6 @@
 use harmonia::PitchClass;
 
-use crate::pitch_extension::StringExt;
+use crate::extensions::pitch_extension::StringExt;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum KeyboardKeyType {

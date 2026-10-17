@@ -11,6 +11,7 @@ pub enum KeyboardError {
     InvalidNote,
     SerializationError(String),
     IoError(String),
+    MidiOutError,
 }
 
 impl std::error::Error for KeyboardError {}
@@ -34,7 +35,7 @@ impl fmt::Display for KeyboardError {
                 write!(f, "Cannot connect to keyboard: {}", details)
             }
             KeyboardError::CantConnectMidi(details) => {
-                write!(f, "Cannot connect to keyboard MIDI port: {}", details)
+                write!(f, "Cannot connect to MIDI port: {}", details)
             }
             KeyboardError::CannotWriteData(details) => {
                 write!(f, "Cannot write data to keyboard: {}", details)
@@ -56,6 +57,9 @@ impl fmt::Display for KeyboardError {
             }
             KeyboardError::IoError(details) => {
                 write!(f, "IO error: {}", details)
+            }
+            KeyboardError::MidiOutError => {
+                write!(f, "Could not connect to midi port ")
             }
         }
     }

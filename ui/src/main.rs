@@ -1,8 +1,9 @@
 use backend::{
-    keyboard_key::{KeyboardKey, KeyboardKeyType},
-    keycolor::KeyColor,
-    pitch_extension::StringExt,
-    pitch_extension::PITCH_CLASS_SELECTION,
+    extensions::pitch_extension::{StringExt, PITCH_CLASS_SELECTION},
+    models::{
+        keyboard_key::{KeyboardKey, KeyboardKeyType},
+        keycolor::KeyColor,
+    },
     targetdevice::TargetDevice,
 };
 use egui::ScrollArea;
@@ -183,7 +184,7 @@ fn draw_keyboard(ui: &mut egui::Ui, keys: Vec<KeyboardKey>, highlight: KeyColor)
     let (_, painter) = ui.allocate_painter(egui::vec2(available, height), egui::Sense::hover());
 
     let to_color = |c: KeyColor| egui::Color32::from_rgb(c.r, c.g, c.b);
-    let stroke = egui::Stroke::new(1.0, egui::Color32::BLACK);
+    let stroke = egui::Stroke::new(1.0_f32, egui::Color32::BLACK);
 
     let mut white_index: u8 = 0;
 
