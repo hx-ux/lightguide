@@ -1,11 +1,10 @@
 mod modes;
+use crate::modes::automatic::AutomaticMode;
+use crate::modes::listen::AutomaticListenMode;
 use backend::midi::{list_midi_out_ports, list_midi_ports};
 use backend::targetdevice::TargetDevice;
 use backend::{display::TextAlignment, keyboard_error::KeyboardError};
 use clap::{Parser, Subcommand};
-
-use crate::modes::automatic::AutomaticMode;
-use crate::modes::listen::AutomaticListenMode;
 
 #[derive(Parser)]
 #[command(
