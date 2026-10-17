@@ -117,7 +117,7 @@ impl AutomaticMode {
         let active_pool: Vec<u8> = if self.sustain {
             self.sustained_keys.keys().copied().collect()
         } else {
-            self.arp_settings.held_keys.iter().copied().collect()
+            self.sustain_hold_notes.keys().copied().collect()
         };
 
         if active_pool.is_empty() {
@@ -193,7 +193,7 @@ impl AutomaticMode {
             }
 
             let gate_dur =
-                Duration::from_secs_f32(step_dur.as_secs_f32() * self.arp_settings.gate as f32);
+                Duration::from_secs_f32(step_dur.as_secs_f32() * self.arp_settings.gate as f32 / 100.0);
             self.arp_active_note = Some((note, now, gate_dur));
 
             // Visual feedback: Update LEDs so the playing arpeggiator note lights up!
