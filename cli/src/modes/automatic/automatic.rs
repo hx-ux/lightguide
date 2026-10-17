@@ -187,13 +187,14 @@ impl AutomaticMode {
                 }
             };
 
-            // Trigger Note On
-            if let Some(out) = tg.midi_out_mut() {
+            // Trigger Note On on every output
+            for out in tg.midi_outs_mut() {
                 let _ = out.note_on(0, note, 100);
             }
-
-            let gate_dur =
-                Duration::from_secs_f32(step_dur.as_secs_f32() * self.arp_settings.gate as f32 / 100.0);
+            
+            let gate_dur = Duration::from_secs_f32(
+                step_dur.as_secs_f32() * self.arp_settings.gate as f32 / 100.0,
+            );
             self.arp_active_note = Some((note, now, gate_dur));
 
             // Visual feedback: Update LEDs so the playing arpeggiator note lights up!
@@ -205,7 +206,7 @@ impl AutomaticMode {
 
     fn stop_arp_note(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
         if let Some((note, _, _)) = self.arp_active_note.take() {
-            if let Some(out) = tg.midi_out_mut() {
+            for out in tg.midi_outs_mut() {
                 let _ = out.note_off(0, note, 64);
             }
         }

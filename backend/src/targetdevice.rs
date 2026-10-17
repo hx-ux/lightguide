@@ -68,7 +68,7 @@ pub struct TargetDevice {
     #[serde(alias = "midi_out_device", deserialize_with = "string_or_vec")]
     pub midi_out_devices: Vec<String>,
     #[serde(skip)]
-    midi_outs: Vec<midi::MidiOut>,
+    pub midi_outs: Vec<midi::MidiOut>,
     #[serde(skip)]
     pub callbacks: Callbacks,
     #[serde(skip)]
