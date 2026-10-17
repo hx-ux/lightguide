@@ -63,8 +63,6 @@ pub struct TargetDevice {
     #[serde(skip)]
     midi_keyboard_link: Option<MidiLink>,
     #[serde(skip)]
-    midi_merge_link: Option<MidiLink>,
-    #[serde(skip)]
     pub midi_keyboard_device: String,
     /// Filters of all MIDI output ports to open (events are sent to every one).
     #[serde(alias = "midi_out_device", deserialize_with = "string_or_vec")]
@@ -98,7 +96,6 @@ impl Default for TargetDevice {
             scale: ScaleKind::Ionian,
             first_note: 36,
             midi_keyboard_link: None,
-            midi_merge_link: None,
             midi_keyboard_device: default_keyboard_filter(),
             midi_out_devices: vec!["KOMPLETE KONTROL S49 Anschluss 2".to_string()],
             callbacks: Callbacks::default(),
@@ -186,16 +183,6 @@ impl TargetDevice {
             .map(|m| m.port_name.as_str())
     }
 
-    /// Whether the merged secondary MIDI input port is open.
-    pub fn is_midi_in_connected(&self) -> bool {
-        self.midi_merge_link.is_some()
-    }
-
-    /// Name of the connected secondary MIDI input port, if any.
-    pub fn midi_in_port_name(&self) -> Option<&str> {
-        self.midi_merge_link.as_ref().map(|m| m.port_name.as_str())
-    }
-
     /// Whether at least one MIDI output port is open.
     pub fn is_midi_out_connected(&self) -> bool {
         !self.midi_outs.is_empty()
@@ -252,16 +239,6 @@ impl TargetDevice {
     pub fn open_keyboard_midi(&mut self, filter: &str) -> Result<(), KeyboardError> {
         self.midi_keyboard_link = None;
         self.midi_keyboard_link = Some(midi::MidiLink::connect(filter)?);
-        Ok(())
-    }
-
-    /// Connect to a secondary MIDI input port to merge with keyboard notes (case-insensitive).
-    pub fn open_midi_in(&mut self, filter: &str) -> Result<(), KeyboardError> {
-        if filter.trim().is_empty() {
-            return Ok(());
-        }
-        self.midi_merge_link = None;
-        self.midi_merge_link = Some(midi::MidiLink::connect(filter)?);
         Ok(())
     }
 
@@ -494,18 +471,6 @@ impl TargetDevice {
             }
         }
 
-        // 2. Merged MIDI device (forward raw messages directly to MIDI output)
-        let mut merged_msgs = Vec::new();
-        if let Some(link) = &self.midi_merge_link {
-            while let Ok(msg) = link.rx.try_recv() {
-                had_midi = true;
-                for out in &mut self.midi_outs {
-                    let _ = out.send_raw(&msg);
-                }
-                merged_msgs.push(msg);
-            }
-        }
-
         // 3. HID (buttons, encoders). Don't block if MIDI already delivered something.
         if let Some(device) = &self.device {
             let mut buf = [0u8; 64];
@@ -518,17 +483,6 @@ impl TargetDevice {
             }
         } else if !had_midi && timeout_ms > 0 {
             std::thread::sleep(std::time::Duration::from_millis(timeout_ms as u64));
-        }
-
-        // Invoke callbacks for merged MIDI input
-        if !merged_msgs.is_empty() && !self.callbacks.midi_merged.is_empty() {
-            let mut cbs = std::mem::take(&mut self.callbacks);
-            for msg in &merged_msgs {
-                for cb in cbs.midi_merged.iter_mut() {
-                    cb(self, msg);
-                }
-            }
-            self.callbacks = cbs;
         }
 
         self.dispatch(&events);
