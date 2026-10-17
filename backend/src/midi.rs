@@ -295,64 +295,6 @@ pub fn list_midi_ports() -> Result<Vec<String>, KeyboardError> {
         .collect())
 }
 
-// /// Connect to the keyboard's default MIDI input port.
-// #[allow(dead_code)]
-// pub(crate) fn connect() -> Result<MidiLink, KeyboardError> {
-//     MidiLink::connect_with_ignore("lightguide-keyboard", DEFAULT_PORT_FILTER, Ignore::All)
-// }
-
-/// A standalone MIDI merger that merges events from an external MIDI input
-/// and an optional keyboard MIDI input into a single MIDI output.
-pub struct MidiMerger {
-    pub keyboard_link: Option<MidiLink>,
-    pub input_link: MidiLink,
-    pub output: MidiOut,
-}
-
-impl MidiMerger {
-    /// Create a new merger by connecting to output, input, and optionally keyboard.
-    pub fn new(
-        keyboard_filter: Option<&str>,
-        input_filter: &str,
-        output_filter: &str,
-    ) -> Result<Self, KeyboardError> {
-        let output = MidiOut::connect(output_filter)?;
-        let input_link = MidiLink::connect(input_filter)?;
-        let keyboard_link = if let Some(kf) = keyboard_filter {
-            if !kf.trim().is_empty() {
-                MidiLink::connect(kf).ok()
-            } else {
-                None
-            }
-        } else {
-            MidiLink::connect(DEFAULT_PORT_FILTER).ok()
-        };
-
-        Ok(Self {
-            keyboard_link,
-            input_link,
-            output,
-        })
-    }
-
-    /// Forward any pending MIDI messages from all inputs directly to the output.
-    /// Returns the total number of forwarded messages.
-    pub fn poll(&mut self) -> Result<usize, KeyboardError> {
-        let mut count = 0;
-        if let Some(kb) = &self.keyboard_link {
-            while let Ok(msg) = kb.rx.try_recv() {
-                self.output.send_raw(&msg)?;
-                count += 1;
-            }
-        }
-        while let Ok(msg) = self.input_link.rx.try_recv() {
-            self.output.send_raw(&msg)?;
-            count += 1;
-        }
-        Ok(count)
-    }
-}
-
 /// Translate one raw MIDI message into an [`InputEvent`].
 ///
 /// `first_note` is the MIDI note of the left-most key, used to compute
