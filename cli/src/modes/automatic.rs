@@ -75,9 +75,7 @@ impl AutomaticMode {
             } => self.on_sustain(tg, value),
             InputEvent::Slider { slider, value } => {
                 // Emulate the slider midi values
-                if let Some(out) = tg.midi_out_mut() {
-                    let _ = out.send_input_event(&InputEvent::Slider { slider, value });
-                }
+                tg.send_midi_event(&InputEvent::Slider { slider, value });
                 Ok(())
             }
         }

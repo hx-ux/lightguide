@@ -16,14 +16,9 @@ struct Cli {
     /// Optional path to a JSON configuration file
     #[arg(short, long)]
     config: Option<std::path::PathBuf>,
-
-    /// Override the MIDI input device to merge with keyboard
+    /// Override the MIDI output devices (repeat the flag for multiple outputs)
     #[arg(long)]
-    midi_in: Option<String>,
-
-    /// Override the MIDI output device
-    #[arg(long)]
-    midi_out: Option<String>,
+    midi_out: Vec<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -70,8 +65,8 @@ pub fn main() -> Result<(), KeyboardError> {
         None => TargetDevice::default(),
     };
 
-    if let Some(midi_out) = cli.midi_out {
-        tg.midi_out_device = midi_out;
+    if !cli.midi_out.is_empty() {
+        tg.midi_out_devices = cli.midi_out;
     }
 
     match cli.command {
@@ -143,9 +138,11 @@ pub fn main() -> Result<(), KeyboardError> {
             let mut automatic = AutomaticMode::new();
 
             println!("automatic mode - press SCALE to toggle Performance / Scale, Ctrl+C to quit");
-            match tg.open_midi_out(&tg.midi_out_device.to_string()) {
-                Ok(_) => println!("MIDI out connected to {}", &tg.midi_out_device),
-                Err(e) => eprintln!("{e}"),
+            for (filter, res) in tg.open_midi_outs() {
+                match res {
+                    Ok(_) => println!("MIDI out connected to {filter}"),
+                    Err(e) => eprintln!("{e}"),
+                }
             }
             automatic.run(&mut tg)?;
         }

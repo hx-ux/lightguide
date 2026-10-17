@@ -16,6 +16,24 @@ const BUTTON_BYTES: usize = 5;
 /// Main encoder + 8 knobs
 const NUM_ENCODERS: usize = 9;
 
+/// Accepts either a single string or a list of strings, so old configs with
+/// `"midi_out_device": "name"` keep working.
+fn string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    Ok(match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::One(s) => vec![s],
+        OneOrMany::Many(v) => v,
+    })
+}
+
 fn default_keyboard_filter() -> String {
     midi::DEFAULT_PORT_FILTER.to_string()
 }
@@ -48,9 +66,11 @@ pub struct TargetDevice {
     midi_merge_link: Option<MidiLink>,
     #[serde(skip)]
     pub midi_keyboard_device: String,
-    pub midi_out_device: String,
+    /// Filters of all MIDI output ports to open (events are sent to every one).
+    #[serde(alias = "midi_out_device", deserialize_with = "string_or_vec")]
+    pub midi_out_devices: Vec<String>,
     #[serde(skip)]
-    midi_out: Option<midi::MidiOut>,
+    midi_outs: Vec<midi::MidiOut>,
     #[serde(skip)]
     pub callbacks: Callbacks,
     #[serde(skip)]
@@ -80,12 +100,12 @@ impl Default for TargetDevice {
             midi_keyboard_link: None,
             midi_merge_link: None,
             midi_keyboard_device: default_keyboard_filter(),
-            midi_out_device: "KOMPLETE KONTROL S49 Anschluss 2".to_string(),
+            midi_out_devices: vec!["KOMPLETE KONTROL S49 Anschluss 2".to_string()],
             callbacks: Callbacks::default(),
             button_state: [0; BUTTON_BYTES],
             encoder_state: None,
             display: DisplayBuffer::default(),
-            midi_out: None,
+            midi_outs: Vec::new(),
         }
     }
 }
@@ -176,14 +196,14 @@ impl TargetDevice {
         self.midi_merge_link.as_ref().map(|m| m.port_name.as_str())
     }
 
-    /// Whether the MIDI output port is open.
+    /// Whether at least one MIDI output port is open.
     pub fn is_midi_out_connected(&self) -> bool {
-        self.midi_out.is_some()
+        !self.midi_outs.is_empty()
     }
 
-    /// Name of the connected MIDI output port, if any.
-    pub fn midi_out_port_name(&self) -> Option<&str> {
-        self.midi_out.as_ref().map(|m| m.port_name())
+    /// Names of all connected MIDI output ports.
+    pub fn midi_out_port_names(&self) -> Vec<&str> {
+        self.midi_outs.iter().map(|m| m.port_name()).collect()
     }
 
     /// Open the HID device and store the handle inside this struct.
@@ -245,18 +265,54 @@ impl TargetDevice {
         Ok(())
     }
 
-    /// Connect to a MIDI output port matching `filter` (case-insensitive).
+    /// Add a MIDI output port matching `filter` (case-insensitive) to the
+    /// list of outputs. Already connected ports are kept.
     pub fn open_midi_out(&mut self, filter: &str) -> Result<(), KeyboardError> {
         if filter.trim().is_empty() {
             return Ok(());
         }
-        self.midi_out = None;
-        self.midi_out = Some(midi::MidiOut::connect(filter)?);
+        let out = midi::MidiOut::connect(filter)?;
+        if self
+            .midi_outs
+            .iter()
+            .any(|o| o.port_name() == out.port_name())
+        {
+            return Ok(());
+        }
+        self.midi_outs.push(out);
         Ok(())
     }
 
-    pub fn midi_out_mut(&mut self) -> Option<&mut midi::MidiOut> {
-        self.midi_out.as_mut()
+    /// Close all outputs and connect every port in `self.midi_out_devices`.
+    /// Returns one result per configured filter.
+    pub fn open_midi_outs(&mut self) -> Vec<(String, Result<(), KeyboardError>)> {
+        self.midi_outs.clear();
+        let filters = self.midi_out_devices.clone();
+        filters
+            .into_iter()
+            .map(|f| {
+                let r = self.open_midi_out(&f);
+                (f, r)
+            })
+            .collect()
+    }
+
+    pub fn midi_outs_mut(&mut self) -> &mut [midi::MidiOut] {
+        &mut self.midi_outs
+    }
+
+    /// Send raw MIDI to every connected output.
+    pub fn send_midi_raw(&mut self, msg: &[u8]) {
+        for out in &mut self.midi_outs {
+            let _ = out.send_raw(msg);
+        }
+    }
+
+    /// Send an [`InputEvent`] to every connected output.
+    pub fn send_midi_event(&mut self, event: &InputEvent) {
+        for out in &mut self.midi_outs {
+            let _ = out.send_input_event(event);
+        }
     }
 
     // set all keys dark
@@ -443,7 +499,7 @@ impl TargetDevice {
         if let Some(link) = &self.midi_merge_link {
             while let Ok(msg) = link.rx.try_recv() {
                 had_midi = true;
-                if let Some(out) = &mut self.midi_out {
+                for out in &mut self.midi_outs {
                     let _ = out.send_raw(&msg);
                 }
                 merged_msgs.push(msg);
@@ -557,7 +613,7 @@ impl TargetDevice {
             return;
         }
 
-        if let Some(out) = &mut self.midi_out {
+        for out in &mut self.midi_outs {
             for ev in events {
                 let _ = out.send_input_event(ev);
             }
