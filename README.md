@@ -9,7 +9,9 @@ Currently, only the Komplete Kontrol S49 MK1 is supported
 - Callbacks for buttons, keys, sliders (touch strips / pedals) and knobs
 - Show text and value bars on the displays
 - Standalone **Automatic Mode**, which tries to recreate the behaviour of the **Komplete Kontrol** software
-- **MIDI Merger**, merging external MIDI device inputs with keyboard notes and forwarding to a defined MIDI output
+- **Midi Output**, supports midi output via
+    - Built-In Midi Port
+    - External Midi Interface
 
 ## Test the keyboard
 
@@ -27,7 +29,7 @@ You can run the automatic mode via:
 You can also create your own config:
 `cargo run -p cli -- save-config config.json`
 
-And run automatic mode with it (it will automatically merge `midi_in_device` if defined):
+And run automatic mode with it
 `cargo run -p cli -- --config config.json automatic`
 
 ## Raspberry Pi
