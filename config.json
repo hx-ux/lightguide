@@ -19,5 +19,6 @@
         "b": 255
     },
     "root_note": "C",
-    "scale": "Ionian (major)"
+    "scale": "Ionian (major)",
+    "midi_out_devices": ["ESI MIDIMATE eX Port 1", "ESI MIDIMATE eX Port 2"]
 }

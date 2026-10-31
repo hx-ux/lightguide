@@ -567,12 +567,6 @@ impl TargetDevice {
             return;
         }
 
-        for out in &mut self.midi_outs {
-            for ev in events {
-                let _ = out.send_input_event(ev);
-            }
-        }
-
         // Temporarily take the callbacks out so they can borrow `self` mutably
         let mut cbs = std::mem::take(&mut self.callbacks);
         for ev in events {

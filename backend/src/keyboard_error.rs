@@ -32,34 +32,34 @@ impl fmt::Display for KeyboardError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             KeyboardError::CantConnectKeyboard(details) => {
-                write!(f, "Cannot connect to keyboard: {}", details)
+                writeln!(f, "Cannot connect to keyboard: {}", details)
             }
             KeyboardError::CantConnectMidi(details) => {
-                write!(f, "Cannot connect to MIDI port: {}", details)
+                writeln!(f, "Cannot connect to MIDI port: {}", details)
             }
             KeyboardError::CannotWriteData(details) => {
-                write!(f, "Cannot write data to keyboard: {}", details)
+                writeln!(f, "Cannot write data to keyboard: {}", details)
             }
             KeyboardError::CannotReadData(details) => {
-                write!(f, "Cannot read data from keyboard: {}", details)
+                writeln!(f, "Cannot read data from keyboard: {}", details)
             }
             KeyboardError::KeyboardNotConnected => {
-                write!(f, "Keyboard is not connected")
+                writeln!(f, "Keyboard is not connected")
             }
             KeyboardError::InvalidScale => {
-                write!(f, "The provided scale is invalid")
+                writeln!(f, "The provided scale is invalid")
             }
             KeyboardError::InvalidNote => {
-                write!(f, "The provided note is invalid")
+                writeln!(f, "The provided note is invalid")
             }
             KeyboardError::SerializationError(details) => {
-                write!(f, "Serialization error: {}", details)
+                writeln!(f, "Serialization error: {}", details)
             }
             KeyboardError::IoError(details) => {
-                write!(f, "IO error: {}", details)
+                writeln!(f, "IO error: {}", details)
             }
             KeyboardError::MidiOutError => {
-                write!(f, "Could not connect to midi port ")
+                writeln!(f, "Could not connect to midi port ")
             }
         }
     }

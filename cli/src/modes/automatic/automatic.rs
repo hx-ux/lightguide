@@ -37,7 +37,7 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn toggle_Scale_Mode(self) -> Self {
+    pub fn toggle_scale_mode(self) -> Self {
         if self == Mode::Performance {
             return Mode::Scale;
         }
@@ -100,6 +100,10 @@ impl AutomaticMode {
     /// Ticks the arpeggiator clock, triggers note-on/note-off, and updates key LEDs
     fn tick_arpeggiator(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
         if !self.arp_settings.active {
+            if self.arp_active_note.is_some() {
+                self.stop_arp_note(tg)?;
+                self.render_leds(tg)?;
+            }
             return Ok(());
         }
 
@@ -158,16 +162,14 @@ impl AutomaticMode {
             let pattern = self.arp_settings.pattern;
             let note = match pattern {
                 ArpPattern::Up => {
-                    let idx = self.arp_settings.arp_step_index % notes.len();
-                    self.arp_settings.arp_step_index =
-                        (self.arp_settings.arp_step_index + 1) % notes.len();
+                    let idx = self.arp_settings.step_index % notes.len();
+                    self.arp_settings.step_index = (self.arp_settings.step_index + 1) % notes.len();
                     notes[idx]
                 }
                 ArpPattern::Down => {
-                    let idx = (notes.len() - 1 - (self.arp_settings.arp_step_index % notes.len()))
+                    let idx = (notes.len() - 1 - (self.arp_settings.step_index % notes.len()))
                         % notes.len();
-                    self.arp_settings.arp_step_index =
-                        (self.arp_settings.arp_step_index + 1) % notes.len();
+                    self.arp_settings.step_index = (self.arp_settings.step_index + 1) % notes.len();
                     notes[idx]
                 }
                 ArpPattern::UpDown => {
@@ -175,9 +177,9 @@ impl AutomaticMode {
                         notes[0]
                     } else {
                         let total_steps = (notes.len() - 1) * 2;
-                        let phase = self.arp_settings.arp_step_index % total_steps;
-                        self.arp_settings.arp_step_index =
-                            (self.arp_settings.arp_step_index + 1) % total_steps;
+                        let phase = self.arp_settings.step_index % total_steps;
+                        self.arp_settings.step_index =
+                            (self.arp_settings.step_index + 1) % total_steps;
                         if phase < notes.len() {
                             notes[phase]
                         } else {
@@ -191,7 +193,7 @@ impl AutomaticMode {
             for out in tg.midi_outs_mut() {
                 let _ = out.note_on(0, note, 100);
             }
-            
+
             let gate_dur = Duration::from_secs_f32(
                 step_dur.as_secs_f32() * self.arp_settings.gate as f32 / 100.0,
             );
@@ -232,6 +234,12 @@ impl AutomaticMode {
 
     /// stored and stay lit until the pedal goes back to not active
     fn on_sustain(&mut self, tg: &mut TargetDevice, value: i32) -> Result<(), KeyboardError> {
+        if !self.arp_settings.active {
+            tg.send_midi_event(&InputEvent::Slider {
+                slider: Slider::Sustain,
+                value,
+            });
+        }
         let on = value >= 64;
         if on == self.sustain {
             return Ok(());
@@ -260,7 +268,7 @@ impl AutomaticMode {
         }
 
         if button == Button::Scale {
-            self.mode = self.mode.toggle_Scale_Mode();
+            self.mode = self.mode.toggle_scale_mode();
             return self.render_all_components(tg);
         }
 
@@ -269,15 +277,61 @@ impl AutomaticMode {
             return self.render_all_components(tg);
         }
 
-        if self.mode == Mode::Scale {
-            match button {
+        match self.mode {
+            Mode::Performance => {}
+            Mode::Scale => match button {
                 Button::NavigateLeft | Button::PageLeft => self.shift_root(tg, -1)?,
                 Button::NavigateRight | Button::PageRight => self.shift_root(tg, 1)?,
                 Button::NavigateUp => self.shift_scale(tg, -1)?,
                 Button::NavigateDown => self.shift_scale(tg, 1)?,
                 _ => {}
+            },
+            Mode::Arp => {
+                let is_active = self.arp_settings.active;
+                match button {
+                    Button::NavigateLeft | Button::PageLeft => {
+                        self.arp_settings.change_entry(super::arp::MenuAction::Left);
+                        self.render_display(tg)?;
+                    }
+
+                    Button::NavigateRight | Button::PageRight => {
+                        self.arp_settings
+                            .change_entry(super::arp::MenuAction::Right);
+                        self.render_display(tg)?;
+                    }
+
+                    Button::NavigateUp => {
+                        self.arp_settings.change_entry(super::arp::MenuAction::Up);
+                        self.render_display(tg)?;
+                    }
+
+                    Button::NavigateDown => {
+                        self.arp_settings.change_entry(super::arp::MenuAction::Down);
+                        self.render_display(tg)?;
+                    }
+                    _ => {}
+                }
+                if !is_active && self.arp_settings.active {
+                    for &note in self.sustain_hold_notes.keys() {
+                        for out in tg.midi_outs_mut() {
+                            let _ = out.note_off(0, note, 0);
+                        }
+                    }
+                    if self.sustain {
+                        tg.send_midi_event(&InputEvent::Slider {
+                            slider: Slider::Sustain,
+                            value: 0,
+                        });
+                    }
+                } else if is_active && !self.arp_settings.active {
+                    self.stop_arp_note(tg)?;
+                    self.render_leds(tg)?;
+                }
             }
         }
+
+        if self.mode == Mode::Scale {}
+
         Ok(())
     }
 
@@ -291,6 +345,11 @@ impl AutomaticMode {
         } else {
             self.sustain_hold_notes.remove(&key.note);
         }
+
+        if !self.arp_settings.active {
+            tg.send_midi_event(&InputEvent::Key(key));
+        }
+
         self.render_leds(tg)
     }
 
@@ -299,10 +358,8 @@ impl AutomaticMode {
         tg: &mut TargetDevice,
         enc: EncoderEvent,
     ) -> Result<(), KeyboardError> {
-        let knob = enc.index - 1;
-        if knob >= NUM_KNOBS {
-            return Ok(());
-        }
+        let knob: usize = enc.index - 1;
+
         let ticks = if self.shift {
             TICKS_PER_STEP_FINE
         } else {
@@ -312,9 +369,15 @@ impl AutomaticMode {
         self.knobs[knob] = (self.knobs[knob] + enc.delta as f32 / ticks).clamp(0.0, KNOB_MAX);
 
         if self.mode == Mode::Performance && self.knob_value(knob) != old {
-            self.draw_knob(tg, knob);
+            self.draw_perfomance_knob_status(tg, knob);
             tg.flush_display()?;
         }
+
+        if self.mode == Mode::Arp && self.knob_value(knob) != old {
+            self.draw_perfomance_knob_status(tg, knob);
+            tg.flush_display()?;
+        }
+
         Ok(())
     }
 
@@ -368,11 +431,11 @@ impl AutomaticMode {
             }
             colors[idx as usize] = tg.response_color;
         }
-        // 3. Active arpeggiator step visual feedback: bright highlight (Cyan)
+        // arpeggiator step color feedback
         if let Some((arp_note, _, _)) = self.arp_active_note {
             let idx = arp_note as i32 - tg.first_note as i32;
             if idx >= 0 && (idx as usize) < colors.len() {
-                colors[idx as usize] = KeyColor { r: 0, g: 0, b: 255 };
+                colors[idx as usize] = self.arp_settings.color
             }
         }
 
@@ -384,7 +447,7 @@ impl AutomaticMode {
             Mode::Performance => {
                 tg.display_text(0, 0, "PERFORM", TextAlignment::Center)?;
                 for knob in 0..NUM_KNOBS {
-                    self.draw_knob(tg, knob);
+                    self.draw_perfomance_knob_status(tg, knob);
                 }
             }
             Mode::Scale => {
@@ -395,9 +458,10 @@ impl AutomaticMode {
                 tg.display_text(1, 1, &root, TextAlignment::Center)?;
                 tg.display_text(2, 0, "SCALE", TextAlignment::Center)?;
 
+                // Split scale name over 2 displays
                 let mut index = 2;
-                for p in tg.scale.name().split(" ") {
-                    tg.display_text(index, 1, &p.to_uppercase(), TextAlignment::Center)?;
+                for scale_part in tg.scale.name().split(" ") {
+                    tg.display_text(index, 1, &scale_part.to_uppercase(), TextAlignment::Center)?;
                     index = index + 1;
                 }
             }
@@ -408,18 +472,36 @@ impl AutomaticMode {
                     true => "ACTIVE",
                     false => "DISABLED",
                 };
+
                 tg.display_text(0, 0, "ARP", TextAlignment::Center)?;
-                tg.display_text(0, 0, arp_state_display, TextAlignment::Center)?;
                 tg.display_text(
-                    1,
                     0,
-                    &format!("{:.0}BPM", self.arp_settings.tempo),
+                    0,
+                    &format!(
+                        "{} {}",
+                        self.arp_settings.menu_selection_active_prefix(0),
+                        arp_state_display,
+                    ),
                     TextAlignment::Center,
                 )?;
 
-                // Display 1: Rate
-                // let rate = ArpRate::ALL[self.arp_rate_index].name();
-                tg.display_text(2, 0, "RATE", TextAlignment::Center)?;
+                tg.display_text(
+                    1,
+                    0,
+                    &format!(
+                        "{} {:.0}BPM",
+                        self.arp_settings.menu_selection_active_prefix(1),
+                        self.arp_settings.tempo,
+                    ),
+                    TextAlignment::Center,
+                )?;
+
+                tg.display_text(
+                    2,
+                    0,
+                    &format!("{} RATE", self.arp_settings.menu_selection_active_prefix(2)),
+                    TextAlignment::Center,
+                )?;
                 tg.display_text(
                     2,
                     1,
@@ -427,9 +509,15 @@ impl AutomaticMode {
                     TextAlignment::Center,
                 )?;
 
-                // Display 2: Pattern
-                // let pat = ArpPattern::ALL[self.arp_pattern_index].name();
-                tg.display_text(3, 0, "PATTERN", TextAlignment::Center)?;
+                tg.display_text(
+                    3,
+                    0,
+                    &format!(
+                        "{} PATTERN",
+                        self.arp_settings.menu_selection_active_prefix(3)
+                    ),
+                    TextAlignment::Center,
+                )?;
                 tg.display_text(
                     3,
                     1,
@@ -437,8 +525,15 @@ impl AutomaticMode {
                     TextAlignment::Center,
                 )?;
 
-                // Display 3: Octave
-                tg.display_text(4, 0, "OCTAVE", TextAlignment::Center)?;
+                tg.display_text(
+                    4,
+                    0,
+                    &format!(
+                        "{} OCTAVE",
+                        self.arp_settings.menu_selection_active_prefix(4)
+                    ),
+                    TextAlignment::Center,
+                )?;
                 tg.display_text(
                     4,
                     1,
@@ -446,14 +541,29 @@ impl AutomaticMode {
                     TextAlignment::Center,
                 )?;
 
-                // Display 4: Gate
-                // let gate_pct = (self.arp_settings.gate * 100.0).round() as u32;
-                //
-                tg.display_text(5, 0, "GATE", TextAlignment::Center)?;
+                tg.display_text(
+                    5,
+                    0,
+                    &format!("{} GATE", self.arp_settings.menu_selection_active_prefix(5)),
+                    TextAlignment::Center,
+                )?;
                 tg.display_text(
                     5,
                     1,
                     &format!("{}%", self.arp_settings.gate),
+                    TextAlignment::Center,
+                )?;
+
+                tg.display_text(
+                    5,
+                    0,
+                    &format!("{} Step", self.arp_settings.menu_selection_active_prefix(6)),
+                    TextAlignment::Center,
+                )?;
+                tg.display_text(
+                    5,
+                    1,
+                    &format!("{}%", self.arp_settings.step_index),
                     TextAlignment::Center,
                 )?;
             }
@@ -462,7 +572,7 @@ impl AutomaticMode {
     }
 
     /// Write bar + label + value of one knob into the display buffer.
-    fn draw_knob(&self, tg: &mut TargetDevice, knob: usize) {
+    fn draw_perfomance_knob_status(&self, tg: &mut TargetDevice, knob: usize) {
         let display = knob + DISPLAY_OFFSET;
         let value = self.knob_value(knob);
         let buf = tg.display_buffer_mut();
