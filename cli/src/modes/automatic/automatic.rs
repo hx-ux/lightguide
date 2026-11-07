@@ -1,5 +1,3 @@
-use std::time::{Duration, Instant};
-
 use backend::{
     display::TextAlignment,
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
@@ -10,10 +8,7 @@ use backend::{
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 
-use crate::modes::automatic::{
-    arp::{ArpPattern, ArpSettings},
-    held_notes::HeldNotes,
-};
+use crate::modes::automatic::{arp::Arpeggiator, held_notes::HeldNotes};
 
 /// Number of endless knobs above the displays
 pub const NUM_KNOBS: usize = 8;
@@ -57,8 +52,7 @@ pub struct AutomaticMode {
     notes: HeldNotes,
     shift: bool,
     last_first_note: u8,
-    arp_settings: ArpSettings,
-    arp_active_note: Option<(u8, Instant, Duration)>, // (note, start_time, gate_duration)
+    arp: Arpeggiator,
 }
 
 impl AutomaticMode {
@@ -69,8 +63,7 @@ impl AutomaticMode {
             notes: HeldNotes::default(),
             shift: false,
             last_first_note: 0,
-            arp_settings: ArpSettings::default(),
-            arp_active_note: None,
+            arp: Arpeggiator::default(),
         }
     }
 
@@ -85,118 +78,11 @@ impl AutomaticMode {
             for ev in events {
                 self.handle(tg, ev)?;
             }
-            self.tick_arpeggiator(tg)?;
-            if tg.first_note != self.last_first_note {
+            if self.arp.tick(tg, self.notes.active_notes()) || tg.first_note != self.last_first_note
+            {
                 self.render_leds(tg)?;
             }
         }
-    }
-    /// Ticks the arpeggiator clock, triggers note-on/note-off, and updates key LEDs
-    fn tick_arpeggiator(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
-        if !self.arp_settings.active {
-            if self.arp_active_note.is_some() {
-                self.stop_arp_note(tg)?;
-                self.render_leds(tg)?;
-            }
-            return Ok(());
-        }
-
-        let now = Instant::now();
-
-        // Check if an active note needs note-off due to gate expiration
-        if let Some((_note, start_time, gate_duration)) = self.arp_active_note {
-            if now.duration_since(start_time) >= gate_duration {
-                self.stop_arp_note(tg)?;
-                self.render_leds(tg)?;
-            }
-        }
-
-        if self.notes.active_notes().is_empty() {
-            if self.arp_active_note.is_some() {
-                self.stop_arp_note(tg)?;
-                self.render_leds(tg)?;
-            }
-            return Ok(());
-        }
-
-        let step_dur = self.arp_settings.step_duration();
-
-        // Check if time has arrived for the next arpeggiator step
-        if now.duration_since(self.arp_settings.last_tick) >= step_dur {
-            self.arp_settings.last_tick = now;
-
-            // Stop previous note if still ringing
-            self.stop_arp_note(tg)?;
-
-            // Build full note list expanded across octaves
-            let mut notes = Vec::new();
-            for oct in 0..self.arp_settings.octaves {
-                for &n in self.notes.active_notes() {
-                    let trans = n + (oct as u8 * 12);
-                    if trans <= 127 {
-                        notes.push(trans);
-                    }
-                }
-            }
-
-            if notes.is_empty() {
-                return Ok(());
-            }
-
-            let pattern = self.arp_settings.pattern;
-            let note = match pattern {
-                ArpPattern::Up => {
-                    let idx = self.arp_settings.step_index % notes.len();
-                    self.arp_settings.step_index = (self.arp_settings.step_index + 1) % notes.len();
-                    notes[idx]
-                }
-                ArpPattern::Down => {
-                    let idx = (notes.len() - 1 - (self.arp_settings.step_index % notes.len()))
-                        % notes.len();
-                    self.arp_settings.step_index = (self.arp_settings.step_index + 1) % notes.len();
-                    notes[idx]
-                }
-                ArpPattern::UpDown => {
-                    if notes.len() == 1 {
-                        notes[0]
-                    } else {
-                        let total_steps = (notes.len() - 1) * 2;
-                        let phase = self.arp_settings.step_index % total_steps;
-                        self.arp_settings.step_index =
-                            (self.arp_settings.step_index + 1) % total_steps;
-                        if phase < notes.len() {
-                            notes[phase]
-                        } else {
-                            notes[total_steps - phase]
-                        }
-                    }
-                }
-            };
-
-            // Trigger Note On on every output
-            for out in tg.midi_outs_mut() {
-                let _ = out.note_on(0, note, 100);
-            }
-
-            let gate_dur = Duration::from_secs_f32(
-                step_dur.as_secs_f32() * self.arp_settings.gate as f32 / 100.0,
-            );
-            self.arp_active_note = Some((note, now, gate_dur));
-
-            // Visual feedback: Update LEDs so the playing arpeggiator note lights up!
-            self.render_leds(tg)?;
-        }
-
-        Ok(())
-    }
-
-    fn stop_arp_note(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
-        if let Some((note, _, _)) = self.arp_active_note.take() {
-            for out in tg.midi_outs_mut() {
-                let _ = out.note_off(0, note, 64);
-            }
-        }
-        Ok(())
     }
 
     fn handle(&mut self, tg: &mut TargetDevice, ev: InputEvent) -> Result<(), KeyboardError> {
@@ -218,7 +104,7 @@ impl AutomaticMode {
 
     /// stored and stay lit until the pedal goes back to not active
     fn on_sustain(&mut self, tg: &mut TargetDevice, value: i32) -> Result<(), KeyboardError> {
-        if !self.arp_settings.active {
+        if !self.arp.settings.active {
             tg.send_midi_event(&InputEvent::Slider {
                 slider: Slider::Sustain,
                 value,
@@ -264,31 +150,32 @@ impl AutomaticMode {
                 _ => {}
             },
             Mode::Arp => {
-                let is_active = self.arp_settings.active;
+                let is_active = self.arp.settings.active;
                 match button {
                     Button::NavigateLeft | Button::PageLeft => {
-                        self.arp_settings.change_entry(super::arp::MenuAction::Left);
+                        self.arp.settings.change_entry(super::arp::MenuAction::Left);
                         self.render_display(tg)?;
                     }
 
                     Button::NavigateRight | Button::PageRight => {
-                        self.arp_settings
+                        self.arp
+                            .settings
                             .change_entry(super::arp::MenuAction::Right);
                         self.render_display(tg)?;
                     }
 
                     Button::NavigateUp => {
-                        self.arp_settings.change_entry(super::arp::MenuAction::Up);
+                        self.arp.settings.change_entry(super::arp::MenuAction::Up);
                         self.render_display(tg)?;
                     }
 
                     Button::NavigateDown => {
-                        self.arp_settings.change_entry(super::arp::MenuAction::Down);
+                        self.arp.settings.change_entry(super::arp::MenuAction::Down);
                         self.render_display(tg)?;
                     }
                     _ => {}
                 }
-                if !is_active && self.arp_settings.active {
+                if !is_active && self.arp.settings.active {
                     for &note in self.notes.held() {
                         for out in tg.midi_outs_mut() {
                             let _ = out.note_off(0, note, 0);
@@ -300,8 +187,7 @@ impl AutomaticMode {
                             value: 0,
                         });
                     }
-                } else if is_active && !self.arp_settings.active {
-                    self.stop_arp_note(tg)?;
+                } else if is_active && !self.arp.settings.active && self.arp.stop(tg) {
                     self.render_leds(tg)?;
                 }
             }
@@ -315,7 +201,7 @@ impl AutomaticMode {
     fn on_key(&mut self, tg: &mut TargetDevice, key: KeyEvent) -> Result<(), KeyboardError> {
         self.notes.handle_key(key.note, key.pressed);
 
-        if !self.arp_settings.active {
+        if !self.arp.settings.active {
             tg.send_midi_event(&InputEvent::Key(key));
         }
 
@@ -397,10 +283,10 @@ impl AutomaticMode {
             colors[idx as usize] = tg.response_color;
         }
         // arpeggiator step color feedback
-        if let Some((arp_note, _, _)) = self.arp_active_note {
+        if let Some(arp_note) = self.arp.active_note() {
             let idx = arp_note as i32 - tg.first_note as i32;
             if idx >= 0 && (idx as usize) < colors.len() {
-                colors[idx as usize] = self.arp_settings.color
+                colors[idx as usize] = self.arp.settings.color
             }
         }
 
@@ -431,9 +317,10 @@ impl AutomaticMode {
                 }
             }
             Mode::Arp => {
+                let arp_settings = &self.arp.settings;
                 tg.display_text(0, 0, "ARP", TextAlignment::Center)?;
 
-                let arp_state_display = match self.arp_settings.active {
+                let arp_state_display = match arp_settings.active {
                     true => "ACTIVE",
                     false => "DISABLED",
                 };
@@ -444,7 +331,7 @@ impl AutomaticMode {
                     0,
                     &format!(
                         "{} {}",
-                        self.arp_settings.menu_selection_active_prefix(0),
+                        arp_settings.menu_selection_active_prefix(0),
                         arp_state_display,
                     ),
                     TextAlignment::Center,
@@ -455,8 +342,8 @@ impl AutomaticMode {
                     0,
                     &format!(
                         "{} {:.0}BPM",
-                        self.arp_settings.menu_selection_active_prefix(1),
-                        self.arp_settings.tempo,
+                        arp_settings.menu_selection_active_prefix(1),
+                        arp_settings.tempo,
                     ),
                     TextAlignment::Center,
                 )?;
@@ -464,13 +351,13 @@ impl AutomaticMode {
                 tg.display_text(
                     2,
                     0,
-                    &format!("{} RATE", self.arp_settings.menu_selection_active_prefix(2)),
+                    &format!("{} RATE", arp_settings.menu_selection_active_prefix(2)),
                     TextAlignment::Center,
                 )?;
                 tg.display_text(
                     2,
                     1,
-                    self.arp_settings.rate.display(),
+                    arp_settings.rate.display(),
                     TextAlignment::Center,
                 )?;
 
@@ -479,14 +366,14 @@ impl AutomaticMode {
                     0,
                     &format!(
                         "{} PATTERN",
-                        self.arp_settings.menu_selection_active_prefix(3)
+                        arp_settings.menu_selection_active_prefix(3)
                     ),
                     TextAlignment::Center,
                 )?;
                 tg.display_text(
                     3,
                     1,
-                    self.arp_settings.pattern.display(),
+                    arp_settings.pattern.display(),
                     TextAlignment::Center,
                 )?;
 
@@ -495,40 +382,40 @@ impl AutomaticMode {
                     0,
                     &format!(
                         "{} OCTAVE",
-                        self.arp_settings.menu_selection_active_prefix(4)
+                        arp_settings.menu_selection_active_prefix(4)
                     ),
                     TextAlignment::Center,
                 )?;
                 tg.display_text(
                     4,
                     1,
-                    &format!("{} OCT", self.arp_settings.octaves),
+                    &format!("{} OCT", arp_settings.octaves),
                     TextAlignment::Center,
                 )?;
 
                 tg.display_text(
                     5,
                     0,
-                    &format!("{} GATE", self.arp_settings.menu_selection_active_prefix(5)),
+                    &format!("{} GATE", arp_settings.menu_selection_active_prefix(5)),
                     TextAlignment::Center,
                 )?;
                 tg.display_text(
                     5,
                     1,
-                    &format!("{}%", self.arp_settings.gate),
+                    &format!("{}%", arp_settings.gate),
                     TextAlignment::Center,
                 )?;
 
                 tg.display_text(
                     5,
                     0,
-                    &format!("{} Step", self.arp_settings.menu_selection_active_prefix(6)),
+                    &format!("{} Step", arp_settings.menu_selection_active_prefix(6)),
                     TextAlignment::Center,
                 )?;
                 tg.display_text(
                     5,
                     1,
-                    &format!("{}%", self.arp_settings.step_index),
+                    &format!("{}%", arp_settings.step_index),
                     TextAlignment::Center,
                 )?;
             }
