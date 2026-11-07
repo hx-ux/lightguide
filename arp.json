@@ -1,0 +1,16 @@
+{
+  "active": true,
+  "color": {
+    "r": 0,
+    "g": 0,
+    "b": 255
+  },
+  "active_params": {
+    "tempo": 120.0,
+    "rate": "Rate1_8",
+    "pattern": "Up",
+    "octaves": 1,
+    "gate": 100
+  },
+  "step_index": 0
+}

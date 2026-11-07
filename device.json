@@ -1,0 +1,24 @@
+{
+    "name": "kontrol49mk1",
+    "keys": 49,
+    "vendor_id": 6092,
+    "product_id": 4944,
+    "keys_hightlight_color": {
+        "r": 255,
+        "g": 0,
+        "b": 0
+    },
+    "keys_dim_color": {
+        "r": 0,
+        "g": 0,
+        "b": 0
+    },
+    "response_color": {
+        "r": 255,
+        "g": 255,
+        "b": 255
+    },
+    "root_note": "C",
+    "scale": "Ionian (major)",
+    "midi_out_devices": ["ESI MIDIMATE eX Port 1", "ESI MIDIMATE eX Port 2"]
+}
