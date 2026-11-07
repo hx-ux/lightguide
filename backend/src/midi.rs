@@ -4,7 +4,7 @@
 //! sent as regular MIDI messages on the keyboard's USB-MIDI port.
 
 use crate::events::{InputEvent, KeyEvent, Slider};
-use crate::keyboard_error::KeyboardError;
+use crate::keyboard_error::DeviceError;
 use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 use std::fmt;
 use std::sync::mpsc::{channel, Receiver};
@@ -26,7 +26,7 @@ impl fmt::Debug for MidiLink {
 }
 
 impl MidiLink {
-    pub fn connect(filter: &str) -> Result<Self, KeyboardError> {
+    pub fn connect(filter: &str) -> Result<Self, DeviceError> {
         Self::connect_with_ignore("lightguide-in", filter, Ignore::None)
     }
 
@@ -35,15 +35,15 @@ impl MidiLink {
         client_name: &str,
         filter: &str,
         ignore: Ignore,
-    ) -> Result<Self, KeyboardError> {
+    ) -> Result<Self, DeviceError> {
         if filter.trim().is_empty() {
-            return Err(KeyboardError::CantConnectMidi(
+            return Err(DeviceError::CantConnectMidi(
                 "MIDI input device filter cannot be empty".to_string(),
             ));
         }
 
         let mut midi_in = MidiInput::new(client_name)
-            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+            .map_err(|e| DeviceError::CantConnectMidi(e.to_string()))?;
         midi_in.ignore(ignore);
 
         let filter_lc = filter.to_lowercase();
@@ -63,7 +63,7 @@ impl MidiLink {
                     .filter_map(|p| midi_in.port_name(p).ok())
                     .collect::<Vec<_>>()
                     .join(", ");
-                KeyboardError::CantConnectMidi(format!(
+                DeviceError::CantConnectMidi(format!(
                     "no MIDI input port matching '{filter}'. Available input ports: [{available}]"
                 ))
             })?;
@@ -79,7 +79,7 @@ impl MidiLink {
                 },
                 (),
             )
-            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+            .map_err(|e| DeviceError::CantConnectMidi(e.to_string()))?;
 
         Ok(Self {
             _conn: conn,
@@ -110,15 +110,15 @@ impl fmt::Debug for MidiOut {
 impl MidiOut {
     /// Connect to the first MIDI output port whose name contains `filter`
     /// (case-insensitive).
-    pub fn connect(filter: &str) -> Result<Self, KeyboardError> {
+    pub fn connect(filter: &str) -> Result<Self, DeviceError> {
         if filter.trim().is_empty() {
-            return Err(KeyboardError::CantConnectMidi(
+            return Err(DeviceError::CantConnectMidi(
                 "MIDI output device filter cannot be empty".to_string(),
             ));
         }
 
         let midi_out = MidiOutput::new("lightguide-out")
-            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+            .map_err(|e| DeviceError::CantConnectMidi(e.to_string()))?;
 
         let filter_lc = filter.to_lowercase();
         let port = midi_out
@@ -137,7 +137,7 @@ impl MidiOut {
                     .filter_map(|p| midi_out.port_name(p).ok())
                     .collect::<Vec<_>>()
                     .join(", ");
-                KeyboardError::CantConnectMidi(format!(
+                DeviceError::CantConnectMidi(format!(
                     "no MIDI output port matching '{filter}'. Available output ports: [{available}]"
                 ))
             })?;
@@ -145,7 +145,7 @@ impl MidiOut {
         let port_name = midi_out.port_name(&port).unwrap_or_default();
         let conn = midi_out
             .connect(&port, "lightguide-out-conn")
-            .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+            .map_err(|e| DeviceError::CantConnectMidi(e.to_string()))?;
 
         Ok(Self { conn, port_name })
     }
@@ -155,19 +155,19 @@ impl MidiOut {
     }
 
     /// Send a raw MIDI byte slice.
-    pub fn send_raw(&mut self, msg: &[u8]) -> Result<(), KeyboardError> {
+    pub fn send_raw(&mut self, msg: &[u8]) -> Result<(), DeviceError> {
         self.conn
             .send(msg)
-            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))
+            .map_err(|e| DeviceError::CannotWriteData(e.to_string()))
     }
 
     /// Send a MIDI Note On message (0x90).
-    pub fn note_on(&mut self, channel: u8, note: u8, velocity: u8) -> Result<(), KeyboardError> {
+    pub fn note_on(&mut self, channel: u8, note: u8, velocity: u8) -> Result<(), DeviceError> {
         self.send_raw(&[0x90 | (channel & 0x0F), note & 0x7F, velocity & 0x7F])
     }
 
     /// Send a MIDI Note Off message (0x80).
-    pub fn note_off(&mut self, channel: u8, note: u8, velocity: u8) -> Result<(), KeyboardError> {
+    pub fn note_off(&mut self, channel: u8, note: u8, velocity: u8) -> Result<(), DeviceError> {
         self.send_raw(&[0x80 | (channel & 0x0F), note & 0x7F, velocity & 0x7F])
     }
 
@@ -177,17 +177,17 @@ impl MidiOut {
         channel: u8,
         controller: u8,
         value: u8,
-    ) -> Result<(), KeyboardError> {
+    ) -> Result<(), DeviceError> {
         self.send_raw(&[0xB0 | (channel & 0x0F), controller & 0x7F, value & 0x7F])
     }
 
     /// Send Program Change message (0xC0).
-    pub fn program_change(&mut self, channel: u8, program: u8) -> Result<(), KeyboardError> {
+    pub fn program_change(&mut self, channel: u8, program: u8) -> Result<(), DeviceError> {
         self.send_raw(&[0xC0 | (channel & 0x0F), program & 0x7F])
     }
 
     /// Send Channel Pressure / Aftertouch message (0xD0).
-    pub fn channel_pressure(&mut self, channel: u8, pressure: u8) -> Result<(), KeyboardError> {
+    pub fn channel_pressure(&mut self, channel: u8, pressure: u8) -> Result<(), DeviceError> {
         self.send_raw(&[0xD0 | (channel & 0x0F), pressure & 0x7F])
     }
 
@@ -197,14 +197,14 @@ impl MidiOut {
         channel: u8,
         note: u8,
         pressure: u8,
-    ) -> Result<(), KeyboardError> {
+    ) -> Result<(), DeviceError> {
         self.send_raw(&[0xA0 | (channel & 0x0F), note & 0x7F, pressure & 0x7F])
     }
 
     /// Send Pitch Bend message (0xE0).
     ///
     /// `value` is centered at 0 (-8192..=8191), as used by [`Slider::PitchBend`].
-    pub fn pitch_bend(&mut self, channel: u8, value: i32) -> Result<(), KeyboardError> {
+    pub fn pitch_bend(&mut self, channel: u8, value: i32) -> Result<(), DeviceError> {
         let raw = (value.clamp(-8192, 8191) + 8192) as u16;
         let lsb = (raw & 0x7F) as u8;
         let msb = ((raw >> 7) & 0x7F) as u8;
@@ -212,17 +212,17 @@ impl MidiOut {
     }
 
     /// Send All Notes Off (CC 123) on a given channel.
-    pub fn all_notes_off(&mut self, channel: u8) -> Result<(), KeyboardError> {
+    pub fn all_notes_off(&mut self, channel: u8) -> Result<(), DeviceError> {
         self.control_change(channel, 123, 0)
     }
 
     /// Send All Sound Off (CC 120) on a given channel.
-    pub fn all_sound_off(&mut self, channel: u8) -> Result<(), KeyboardError> {
+    pub fn all_sound_off(&mut self, channel: u8) -> Result<(), DeviceError> {
         self.control_change(channel, 120, 0)
     }
 
     /// Reset All Controllers (CC 121) on a given channel.
-    pub fn reset_all_controllers(&mut self, channel: u8) -> Result<(), KeyboardError> {
+    pub fn reset_all_controllers(&mut self, channel: u8) -> Result<(), DeviceError> {
         self.control_change(channel, 121, 0)
     }
 
@@ -232,7 +232,7 @@ impl MidiOut {
     /// the respective CC, aftertouch, or pitch bend is transmitted.
     /// Returns `Ok(true)` if the event was translated and sent, or `Ok(false)` if the event
     /// has no direct MIDI equivalent (such as button or encoder events, unless custom mapped).
-    pub fn send_input_event(&mut self, event: &InputEvent) -> Result<bool, KeyboardError> {
+    pub fn send_input_event(&mut self, event: &InputEvent) -> Result<bool, DeviceError> {
         match event {
             InputEvent::Key(k) => {
                 if k.pressed {
@@ -274,9 +274,9 @@ impl MidiOut {
 }
 
 /// Names of all MIDI output ports visible on this system.
-pub fn list_midi_out_ports() -> Result<Vec<String>, KeyboardError> {
+pub fn list_midi_out_ports() -> Result<Vec<String>, DeviceError> {
     let midi_out = MidiOutput::new("lightguide-list-out")
-        .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+        .map_err(|e| DeviceError::CantConnectMidi(e.to_string()))?;
     Ok(midi_out
         .ports()
         .iter()
@@ -285,9 +285,9 @@ pub fn list_midi_out_ports() -> Result<Vec<String>, KeyboardError> {
 }
 
 /// Names of all MIDI input ports visible on this system (handy for debugging).
-pub fn list_midi_ports() -> Result<Vec<String>, KeyboardError> {
+pub fn list_midi_ports() -> Result<Vec<String>, DeviceError> {
     let midi_in = MidiInput::new("lightguide-list")
-        .map_err(|e| KeyboardError::CantConnectMidi(e.to_string()))?;
+        .map_err(|e| DeviceError::CantConnectMidi(e.to_string()))?;
     Ok(midi_in
         .ports()
         .iter()

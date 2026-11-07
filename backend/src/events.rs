@@ -100,6 +100,27 @@ pub enum Slider {
     ControlChange(u8),
 }
 
+impl Slider {
+    pub fn from_cc(cc: u8) -> Self {
+        match cc {
+            1 => Self::Modulation,
+            11 => Self::Expression,
+            64 => Self::Sustain,
+            other => Self::ControlChange(other),
+        }
+    }
+
+    pub fn cc_number(self) -> Option<u8> {
+        match self {
+            Self::Modulation => Some(1),
+            Self::Expression => Some(11),
+            Self::Sustain => Some(64),
+            Self::ControlChange(cc) => Some(cc),
+            Self::PitchBend | Self::Aftertouch => None,
+        }
+    }
+}
+
 /// One of the endless knobs was turned (HID).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EncoderEvent {

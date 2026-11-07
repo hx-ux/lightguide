@@ -70,18 +70,24 @@ pub fn split_across_displays(text: &str) -> Vec<String> {
 #[derive(Debug, Clone)]
 pub struct DisplayBuffer {
     data: [[u8; ROWS * BYTES_PER_ROW]; NUM_DISPLAYS],
+    flushed: Option<[[u8; ROWS * BYTES_PER_ROW]; NUM_DISPLAYS]>,
 }
 
 impl Default for DisplayBuffer {
     fn default() -> Self {
         Self {
             data: [[0u8; ROWS * BYTES_PER_ROW]; NUM_DISPLAYS],
+            flushed: None,
         }
     }
 }
 
 impl DisplayBuffer {
-    /// Blank all displays.
+    /// Force the next flush to resend all rows to the hardware.
+    pub fn invalidate(&mut self) {
+        self.flushed = None;
+    }
+
     pub fn clear(&mut self) {
         for d in self.data.iter_mut() {
             d.fill(0);
@@ -166,19 +172,43 @@ impl DisplayBuffer {
         }
     }
 
-    /// Build the 3 HID output reports (one per row) for all displays.
+    /// Build the 3 HID output reports
     pub fn reports(&self) -> [Vec<u8>; ROWS] {
-        std::array::from_fn(|row| {
-            let mut report = Vec::with_capacity(REPORT_HEADER.len() + REPORT_PAYLOAD);
-            report.extend_from_slice(&REPORT_HEADER);
-            report[3] = row as u8;
-            let mut payload = [0u8; REPORT_PAYLOAD];
-            for (i, d) in self.data.iter().enumerate() {
-                payload[i * BYTES_PER_ROW..(i + 1) * BYTES_PER_ROW]
-                    .copy_from_slice(&d[row * BYTES_PER_ROW..(row + 1) * BYTES_PER_ROW]);
-            }
-            report.extend_from_slice(&payload);
-            report
-        })
+        std::array::from_fn(|row| self.build_row_report(row))
+    }
+
+    pub fn pending_reports(&self) -> Vec<Vec<u8>> {
+        (0..ROWS)
+            .filter(|&row| self.is_row_dirty(row))
+            .map(|row| self.build_row_report(row))
+            .collect()
+    }
+
+    pub fn mark_flushed(&mut self) {
+        self.flushed = Some(self.data);
+    }
+
+    fn is_row_dirty(&self, row: usize) -> bool {
+        let Some(prev) = &self.flushed else {
+            return true;
+        };
+        let range = row * BYTES_PER_ROW..(row + 1) * BYTES_PER_ROW;
+        self.data
+            .iter()
+            .zip(prev.iter())
+            .any(|(cur, old)| cur[range.clone()] != old[range.clone()])
+    }
+
+    fn build_row_report(&self, row: usize) -> Vec<u8> {
+        let mut report = Vec::with_capacity(REPORT_HEADER.len() + REPORT_PAYLOAD);
+        report.extend_from_slice(&REPORT_HEADER);
+        report[3] = row as u8;
+        let mut payload = [0u8; REPORT_PAYLOAD];
+        for (i, d) in self.data.iter().enumerate() {
+            payload[i * BYTES_PER_ROW..(i + 1) * BYTES_PER_ROW]
+                .copy_from_slice(&d[row * BYTES_PER_ROW..(row + 1) * BYTES_PER_ROW]);
+        }
+        report.extend_from_slice(&payload);
+        report
     }
 }

@@ -1,7 +1,7 @@
 use core::fmt;
 
 #[derive(Debug)]
-pub enum KeyboardError {
+pub enum DeviceError {
     CantConnectKeyboard(String),
     CantConnectMidi(String),
     CannotWriteData(String),
@@ -14,52 +14,52 @@ pub enum KeyboardError {
     MidiOutError,
 }
 
-impl std::error::Error for KeyboardError {}
+impl std::error::Error for DeviceError {}
 
-impl From<std::io::Error> for KeyboardError {
+impl From<std::io::Error> for DeviceError {
     fn from(err: std::io::Error) -> Self {
-        KeyboardError::IoError(err.to_string())
+        DeviceError::IoError(err.to_string())
     }
 }
 
-impl From<serde_json::Error> for KeyboardError {
+impl From<serde_json::Error> for DeviceError {
     fn from(err: serde_json::Error) -> Self {
-        KeyboardError::SerializationError(err.to_string())
+        DeviceError::SerializationError(err.to_string())
     }
 }
 
-impl fmt::Display for KeyboardError {
+impl fmt::Display for DeviceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            KeyboardError::CantConnectKeyboard(details) => {
-                write!(f, "Cannot connect to keyboard: {}", details)
+            DeviceError::CantConnectKeyboard(details) => {
+                writeln!(f, "Cannot connect to keyboard: {}", details)
             }
-            KeyboardError::CantConnectMidi(details) => {
-                write!(f, "Cannot connect to MIDI port: {}", details)
+            DeviceError::CantConnectMidi(details) => {
+                writeln!(f, "Cannot connect to MIDI port: {}", details)
             }
-            KeyboardError::CannotWriteData(details) => {
-                write!(f, "Cannot write data to keyboard: {}", details)
+            DeviceError::CannotWriteData(details) => {
+                writeln!(f, "Cannot write data to keyboard: {}", details)
             }
-            KeyboardError::CannotReadData(details) => {
-                write!(f, "Cannot read data from keyboard: {}", details)
+            DeviceError::CannotReadData(details) => {
+                writeln!(f, "Cannot read data from keyboard: {}", details)
             }
-            KeyboardError::KeyboardNotConnected => {
-                write!(f, "Keyboard is not connected")
+            DeviceError::KeyboardNotConnected => {
+                writeln!(f, "Keyboard is not connected")
             }
-            KeyboardError::InvalidScale => {
-                write!(f, "The provided scale is invalid")
+            DeviceError::InvalidScale => {
+                writeln!(f, "The provided scale is invalid")
             }
-            KeyboardError::InvalidNote => {
-                write!(f, "The provided note is invalid")
+            DeviceError::InvalidNote => {
+                writeln!(f, "The provided note is invalid")
             }
-            KeyboardError::SerializationError(details) => {
-                write!(f, "Serialization error: {}", details)
+            DeviceError::SerializationError(details) => {
+                writeln!(f, "Serialization error: {}", details)
             }
-            KeyboardError::IoError(details) => {
-                write!(f, "IO error: {}", details)
+            DeviceError::IoError(details) => {
+                writeln!(f, "IO error: {}", details)
             }
-            KeyboardError::MidiOutError => {
-                write!(f, "Could not connect to midi port ")
+            DeviceError::MidiOutError => {
+                writeln!(f, "Could not connect to midi port ")
             }
         }
     }

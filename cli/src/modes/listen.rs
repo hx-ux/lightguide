@@ -1,4 +1,4 @@
-use backend::{keyboard_error::KeyboardError, targetdevice::TargetDevice};
+use backend::{keyboard_error::DeviceError, targetdevice::TargetDevice};
 
 pub struct AutomaticListenMode {}
 
@@ -7,7 +7,7 @@ impl AutomaticListenMode {
         Self {}
     }
 
-    pub fn run_listen(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
+    pub fn run_listen(&mut self, tg: &mut TargetDevice) -> Result<(), DeviceError> {
         tg.on_button(|_dev, button, pressed| {
             println!(
                 "BUTTON {:?} {}",
@@ -26,7 +26,14 @@ impl AutomaticListenMode {
         });
 
         tg.on_slider(|_dev, slider, value| {
-            println!("SLIDER {:?} = {}", slider, value);
+            let mut cc_num = "none".to_string();
+            match slider.cc_number() {
+                Some(cc) => {
+                    cc_num = format!("{}", cc);
+                }
+                None => {}
+            }
+            println!("SLIDER {:?} {} = {}", slider, cc_num, value);
         });
 
         tg.on_encoder(|_dev, enc| {
