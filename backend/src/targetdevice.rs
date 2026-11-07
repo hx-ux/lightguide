@@ -3,18 +3,13 @@ use crate::{
     display::{self, DisplayBuffer, TextAlignment},
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
     extensions::{pitch_extension::pitch_serde, scale_extension::scale_serde},
+    hid::HidConnection,
     keyboard_error::KeyboardError,
     midi::{self, MidiLink},
     models::{keyboard_key::KeyboardKey, keycolor::KeyColor},
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
-use hidapi::HidDevice;
 use serde::{Deserialize, Serialize};
-
-/// Number of bytes of the button bitfield in the HID input report
-const BUTTON_BYTES: usize = 5;
-/// Main encoder + 8 knobs
-const NUM_ENCODERS: usize = 9;
 
 /// Accepts either a single string or a list of strings, so old configs with
 /// `"midi_out_device": "name"` keep working.
@@ -53,7 +48,7 @@ pub struct TargetDevice {
     pub keys_dim_color: KeyColor,
     pub response_color: KeyColor,
     #[serde(skip)]
-    device: Option<HidDevice>,
+    hid: HidConnection,
     #[serde(with = "pitch_serde")]
     pub root_note: PitchClass,
     #[serde(with = "scale_serde")]
@@ -72,10 +67,6 @@ pub struct TargetDevice {
     #[serde(skip)]
     pub callbacks: Callbacks,
     #[serde(skip)]
-    button_state: [u8; BUTTON_BYTES],
-    #[serde(skip)]
-    encoder_state: Option<[u16; NUM_ENCODERS]>,
-    #[serde(skip)]
     display: DisplayBuffer,
 }
 
@@ -91,7 +82,7 @@ impl Default for TargetDevice {
             keys_hightlight_color: KeyColor::new(255, 0, 0),
             keys_dim_color: KeyColor::new(0, 0, 0),
             response_color: KeyColor::new(255, 255, 255),
-            device: None,
+            hid: HidConnection::default(),
             root_note: PitchClass::C,
             scale: ScaleKind::Ionian,
             first_note: 36,
@@ -99,8 +90,6 @@ impl Default for TargetDevice {
             midi_keyboard_device: default_keyboard_filter(),
             midi_out_devices: vec!["KOMPLETE KONTROL S49 Anschluss 2".to_string()],
             callbacks: Callbacks::default(),
-            button_state: [0; BUTTON_BYTES],
-            encoder_state: None,
             display: DisplayBuffer::default(),
             midi_outs: Vec::new(),
         }
@@ -168,7 +157,7 @@ impl TargetDevice {
 
     /// Is the HID device is currently open.
     pub fn is_hid_connected(&self) -> bool {
-        self.device.is_some()
+        self.hid.is_connected()
     }
 
     /// Whether the keyboard MIDI input port is open.
@@ -200,24 +189,7 @@ impl TargetDevice {
     /// printed; button / encoder events and the lights still work without it.
     ///
     pub fn open_hid_device(&mut self) -> Result<(), KeyboardError> {
-        let api =
-            hidapi::HidApi::new().map_err(|e| KeyboardError::CantConnectKeyboard(e.to_string()))?;
-
-        let device = api
-            .open(self.vendor_id, self.product_id)
-            .map_err(|e| KeyboardError::CantConnectKeyboard(e.to_string()))?;
-
-        // Short startup sequence, which blacks out everything on the device
-        // REQUIRED !
-        const STARTUP_SEQUENCE: [u8; 3] = [0xa0, 0x00, 0x00];
-
-        device
-            .write(&STARTUP_SEQUENCE)
-            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
-
-        self.device = Some(device);
-        self.button_state = [0; BUTTON_BYTES];
-        self.encoder_state = None;
+        self.hid.open(self.vendor_id, self.product_id)?;
         self.display.invalidate();
 
         if let Err(e) = self.open_midi() {
@@ -295,17 +267,7 @@ impl TargetDevice {
 
     // set all keys dark
     pub fn notes_off(&self) -> Result<(), KeyboardError> {
-        let device = self
-            .device
-            .as_ref()
-            .ok_or(KeyboardError::KeyboardNotConnected)?;
-
-        let mut report = vec![0u8; self.report_size];
-        report[0] = self.key_leds_adress;
-        device
-            .write(&report)
-            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
-        Ok(())
+        self.set_key_leds(&[])
     }
 
     pub fn set_scale_string(&mut self, scale: String) -> Result<(), KeyboardError> {
@@ -371,20 +333,12 @@ impl TargetDevice {
     /// `colors[i]` is the color of key `i` (0 = left-most key). Keys without
     /// an entry are switched off, surplus entries are ignored.
     pub fn set_key_leds(&self, colors: &[KeyColor]) -> Result<(), KeyboardError> {
-        let device = self
-            .device
-            .as_ref()
-            .ok_or(KeyboardError::KeyboardNotConnected)?;
-
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
         for (pos, color) in colors.iter().take(self.keys).enumerate() {
             set_single_key_color(&mut report, pos, *color);
         }
-        device
-            .write(&report)
-            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
-        Ok(())
+        self.hid.write(&report)
     }
 
     pub fn set_highlight_color(&mut self, color: KeyColor) -> Result<(), KeyboardError> {
@@ -472,19 +426,9 @@ impl TargetDevice {
             }
         }
 
-        // 3. HID (buttons, encoders). Don't block if MIDI already delivered something.
-        if let Some(device) = &self.device {
-            let mut buf = [0u8; 64];
-            let timeout = if had_midi { 0 } else { timeout_ms };
-            let n = device
-                .read_timeout(&mut buf, timeout)
-                .map_err(|e| KeyboardError::CannotReadData(e.to_string()))?;
-            if n > 0 {
-                self.parse_hid_report(&buf[..n], &mut events);
-            }
-        } else if !had_midi && timeout_ms > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(timeout_ms as u64));
-        }
+        // 2. HID (buttons, encoders). Don't block if MIDI already delivered something.
+        let timeout = if had_midi { 0 } else { timeout_ms };
+        self.hid.poll(timeout, &mut self.first_note, &mut events)?;
 
         self.dispatch(&events);
         Ok(events)
@@ -501,66 +445,6 @@ impl TargetDevice {
     /// dispatches the callbacks.
     pub fn read_input(&mut self) -> Result<(), KeyboardError> {
         self.poll(100).map(|_| ())
-    }
-
-    fn parse_hid_report(&mut self, buf: &[u8], events: &mut Vec<InputEvent>) {
-        // Only report 0x01 contains the button / encoder state
-        if buf.first() != Some(&0x01) || buf.len() < 1 + BUTTON_BYTES {
-            return;
-        }
-
-        // Buttons: bitfield in bytes 1..=5
-        for byte in 0..BUTTON_BYTES {
-            let new = buf[1 + byte];
-            let changed = new ^ self.button_state[byte];
-            if changed == 0 {
-                continue;
-            }
-            for bit in 0..8u8 {
-                if changed & (1 << bit) != 0 {
-                    events.push(InputEvent::Button {
-                        button: Button::from_bit(byte as u8 * 8 + bit),
-                        pressed: new & (1 << bit) != 0,
-                    });
-                }
-            }
-            self.button_state[byte] = new;
-        }
-
-        // Encoders: byte 6 = main encoder (4 bit), bytes 7..=22 = 8 knobs (10 bit, LE)
-        if buf.len() >= 23 {
-            let mut values = [0u16; NUM_ENCODERS];
-            values[0] = (buf[6] & 0x0F) as u16;
-            for i in 0..8 {
-                let lo = buf[7 + i * 2] as u16;
-                let hi = buf[8 + i * 2] as u16;
-                values[i + 1] = (lo | (hi << 8)) & 0x3FF;
-            }
-
-            if let Some(old) = self.encoder_state {
-                for (index, (&new, &prev)) in values.iter().zip(old.iter()).enumerate() {
-                    if new == prev {
-                        continue;
-                    }
-                    let modulo: i32 = if index == 0 { 16 } else { 1024 };
-                    let half = modulo / 2;
-                    let delta = (new as i32 - prev as i32 + half).rem_euclid(modulo) - half;
-                    events.push(InputEvent::Encoder(EncoderEvent {
-                        index,
-                        delta,
-                        raw: new,
-                    }));
-                }
-            }
-            self.encoder_state = Some(values);
-        }
-
-        // Byte 37: MIDI note of the left-most key (changes with octave up/down)
-        if let Some(&note) = buf.get(37) {
-            if note > 0 && note < 128 {
-                self.first_note = note;
-            }
-        }
     }
 
     fn dispatch(&mut self, events: &[InputEvent]) {
@@ -651,14 +535,8 @@ impl TargetDevice {
 
     /// Send changed rows of the display buffer to the hardware.
     pub fn flush_display(&mut self) -> Result<(), KeyboardError> {
-        let device = self
-            .device
-            .as_ref()
-            .ok_or(KeyboardError::KeyboardNotConnected)?;
         for report in self.display.pending_reports() {
-            device
-                .write(&report)
-                .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
+            self.hid.write(&report)?;
         }
         self.display.mark_flushed();
         Ok(())
