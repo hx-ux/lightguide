@@ -14,6 +14,7 @@ use clap::{Parser, Subcommand};
 struct Cli {
     /// Optional path to a JSON configuration file
     #[arg(short, long)]
+    #[arg(default_value = "device.json")]
     config: Option<std::path::PathBuf>,
     /// Override the MIDI output devices (repeat the flag for multiple outputs)
     #[arg(long)]
@@ -47,7 +48,7 @@ enum Commands {
     /// Standalone Automatic Mode
     Automatic,
     SaveConfig {
-        #[arg(default_value = "config.json")]
+        #[arg(default_value = "device.json")]
         path: std::path::PathBuf,
     },
     PrintConfig,

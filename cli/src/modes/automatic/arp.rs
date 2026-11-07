@@ -315,7 +315,7 @@ impl Arpeggiator {
 
     pub fn menu_label(&self, item: ArpMenuItem) -> String {
         if self.menu_item == item {
-            format!(">{}", item.title())
+            format!("*{}", item.title())
         } else {
             item.title().to_string()
         }
