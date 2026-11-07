@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use backend::{
     display::TextAlignment,
@@ -13,9 +10,10 @@ use backend::{
 };
 use harmonia::{PitchClass, Scale, ScaleKind};
 
-use crate::modes::automatic::arp::{ArpPattern, ArpSettings};
-
-// use crate::modes::automatic::;
+use crate::modes::automatic::{
+    arp::{ArpPattern, ArpSettings},
+    held_notes::HeldNotes,
+};
 
 /// Number of endless knobs above the displays
 pub const NUM_KNOBS: usize = 8;
@@ -56,9 +54,7 @@ pub struct AutomaticMode {
     mode: Mode,
     /// Knob values, 0.0 ..= 127.0 (kept fractional for smooth fine control)
     knobs: [f32; NUM_KNOBS],
-    sustain_hold_notes: HashMap<u8, u8>,
-    sustain: bool,
-    sustained_keys: HashMap<u8, u8>,
+    notes: HeldNotes,
     shift: bool,
     last_first_note: u8,
     arp_settings: ArpSettings,
@@ -70,12 +66,10 @@ impl AutomaticMode {
         Self {
             mode: Mode::Performance,
             knobs: [0.0; NUM_KNOBS],
-            sustain_hold_notes: HashMap::new(),
-            sustain: false,
-            sustained_keys: HashMap::new(),
+            notes: HeldNotes::default(),
             shift: false,
             last_first_note: 0,
-            arp_settings: ArpSettings::default(), // arp_settings:
+            arp_settings: ArpSettings::default(),
             arp_active_note: None,
         }
     }
@@ -117,14 +111,7 @@ impl AutomaticMode {
             }
         }
 
-        // Active notes pool from currently held keys (or sustained keys)
-        let active_pool: Vec<u8> = if self.sustain {
-            self.sustained_keys.keys().copied().collect()
-        } else {
-            self.sustain_hold_notes.keys().copied().collect()
-        };
-
-        if active_pool.is_empty() {
+        if self.notes.active_notes().is_empty() {
             if self.arp_active_note.is_some() {
                 self.stop_arp_note(tg)?;
                 self.render_leds(tg)?;
@@ -142,12 +129,9 @@ impl AutomaticMode {
             self.stop_arp_note(tg)?;
 
             // Build full note list expanded across octaves
-            let mut base_notes = active_pool;
-            base_notes.sort_unstable();
-
             let mut notes = Vec::new();
             for oct in 0..self.arp_settings.octaves {
-                for &n in &base_notes {
+                for &n in self.notes.active_notes() {
                     let trans = n + (oct as u8 * 12);
                     if trans <= 127 {
                         notes.push(trans);
@@ -240,17 +224,10 @@ impl AutomaticMode {
                 value,
             });
         }
-        let on = value >= 64;
-        if on == self.sustain {
-            return Ok(());
+        if self.notes.set_sustain(value >= 64) {
+            self.render_leds(tg)?;
         }
-        self.sustain = on;
-        if on {
-            self.sustained_keys = self.sustain_hold_notes.clone();
-        } else {
-            self.sustained_keys.clear();
-        }
-        self.render_leds(tg)
+        Ok(())
     }
 
     fn on_button(
@@ -312,12 +289,12 @@ impl AutomaticMode {
                     _ => {}
                 }
                 if !is_active && self.arp_settings.active {
-                    for &note in self.sustain_hold_notes.keys() {
+                    for &note in self.notes.held() {
                         for out in tg.midi_outs_mut() {
                             let _ = out.note_off(0, note, 0);
                         }
                     }
-                    if self.sustain {
+                    if self.notes.is_sustained() {
                         tg.send_midi_event(&InputEvent::Slider {
                             slider: Slider::Sustain,
                             value: 0,
@@ -336,15 +313,7 @@ impl AutomaticMode {
     }
 
     fn on_key(&mut self, tg: &mut TargetDevice, key: KeyEvent) -> Result<(), KeyboardError> {
-        if key.pressed {
-            self.sustain_hold_notes.insert(key.note, key.velocity);
-            // While the sustain pedal is down every pressed key is kept lit
-            if self.sustain {
-                self.sustained_keys.insert(key.note, key.velocity);
-            }
-        } else {
-            self.sustain_hold_notes.remove(&key.note);
-        }
+        self.notes.handle_key(key.note, key.pressed);
 
         if !self.arp_settings.active {
             tg.send_midi_event(&InputEvent::Key(key));
@@ -420,11 +389,7 @@ impl AutomaticMode {
             })
             .collect();
 
-        for (&note, _) in self
-            .sustained_keys
-            .iter()
-            .chain(self.sustain_hold_notes.iter())
-        {
+        for note in self.notes.lit_notes() {
             let idx = note as i32 - tg.first_note as i32;
             if idx < 0 || idx as usize >= colors.len() {
                 continue;
