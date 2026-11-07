@@ -26,7 +26,14 @@ impl AutomaticListenMode {
         });
 
         tg.on_slider(|_dev, slider, value| {
-            println!("SLIDER {:?} = {}", slider, value);
+            let mut cc_num = "none".to_string();
+            match slider.cc_number() {
+                Some(cc) => {
+                    cc_num = format!("{}", cc);
+                }
+                None => {}
+            }
+            println!("SLIDER {:?} {} = {}", slider, cc_num, value);
         });
 
         tg.on_encoder(|_dev, enc| {
