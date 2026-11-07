@@ -5,6 +5,10 @@ use std::{
 
 use backend::{models::keycolor::KeyColor, targetdevice::TargetDevice};
 
+/// All keys pressed in this timespan gets merged as an chord
+const CHORD_CAPTURE_WINDOW: Duration = Duration::from_millis(15);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
     Left,
     Right,
@@ -12,40 +16,121 @@ pub enum MenuAction {
     Up,
 }
 
-/// Currently playin arpnote
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TickOutcome {
+    pub leds_dirty: bool,
+    pub display_dirty: bool,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ActiveArpNote {
     pub note: u8,
-    started_at: Instant,
-    gate: Duration,
+    expires_at: Instant,
 }
 
 impl ActiveArpNote {
     pub fn new(note: u8, started_at: Instant, gate: Duration) -> Self {
         Self {
             note,
-            started_at,
-            gate,
+            expires_at: started_at + gate,
         }
     }
 
     pub fn is_expired(self, now: Instant) -> bool {
-        now.duration_since(self.started_at) >= self.gate
+        now >= self.expires_at
     }
 }
 
-/// Arpeggiator playback engine owning settings and runtime clock/note state.
+/// Musical parameters of the arpeggiator (staged while playing, applied at pattern end).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArpParams {
+    pub tempo: f32,
+    pub rate: ArpRate,
+    pub pattern: ArpPattern,
+    pub octaves: usize,
+    pub gate: usize,
+}
+
+impl Default for ArpParams {
+    fn default() -> Self {
+        Self {
+            tempo: 120.0,
+            rate: ArpRate::default(),
+            pattern: ArpPattern::default(),
+            octaves: 1,
+            gate: 100,
+        }
+    }
+}
+
+impl ArpParams {
+    pub fn step_duration(&self) -> Duration {
+        let beat_secs = 60.0 / self.tempo.max(20.0);
+        Duration::from_secs_f32(beat_secs * self.rate.factor())
+    }
+}
+
+/// Selectable entries in the hardware Arp menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ArpMenuItem {
+    #[default]
+    Active,
+    Tempo,
+    Rate,
+    Pattern,
+    Octaves,
+    Gate,
+}
+
+impl Cycle for ArpMenuItem {
+    const ALL: &'static [Self] = &[
+        Self::Active,
+        Self::Tempo,
+        Self::Rate,
+        Self::Pattern,
+        Self::Octaves,
+        Self::Gate,
+    ];
+}
+
+impl ArpMenuItem {
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Active => "ARP",
+            Self::Tempo => "TEMPO",
+            Self::Rate => "RATE",
+            Self::Pattern => "PATTERN",
+            Self::Octaves => "OCTAVE",
+            Self::Gate => "GATE",
+        }
+    }
+}
+
+/// Arpeggiator playback engine with pattern-quantized parameter updates.
 pub struct Arpeggiator {
-    pub settings: ArpSettings,
-    last_tick: Instant,
+    pub active: bool,
+    pub color: KeyColor,
+    pub menu_item: ArpMenuItem,
+    active_params: ArpParams,
+    staged_params: ArpParams,
+    step_index: usize,
+    next_step_at: Option<Instant>,
+    chord_arm_until: Option<Instant>,
     active_note: Option<ActiveArpNote>,
 }
 
 impl Default for Arpeggiator {
     fn default() -> Self {
+        let params = ArpParams::default();
         Self {
-            settings: ArpSettings::default(),
-            last_tick: Instant::now(),
+            active: true,
+            color: KeyColor { r: 0, g: 0, b: 255 },
+            menu_item: ArpMenuItem::default(),
+            active_params: params,
+            staged_params: params,
+            step_index: 0,
+            next_step_at: None,
+            chord_arm_until: None,
             active_note: None,
         }
     }
@@ -54,6 +139,44 @@ impl Default for Arpeggiator {
 impl Arpeggiator {
     pub fn active_note(&self) -> Option<u8> {
         self.active_note.map(|n| n.note)
+    }
+
+    pub fn has_pending_changes(&self) -> bool {
+        self.active_params != self.staged_params
+    }
+
+    /// Called whenever a piano key is pressed so chords always start at position 0.
+    pub fn on_note_pressed(&mut self, was_empty: bool) {
+        self.step_index = 0;
+        if was_empty {
+            self.active_params = self.staged_params;
+            self.chord_arm_until = Some(Instant::now() + CHORD_CAPTURE_WINDOW);
+            self.next_step_at = None;
+        }
+    }
+
+    pub fn poll_timeout_ms(&self, default_ms: i32) -> i32 {
+        if !self.active {
+            return default_ms;
+        }
+        let earliest = [
+            self.chord_arm_until,
+            self.active_note.map(|n| n.expires_at),
+            self.next_step_at,
+        ]
+        .into_iter()
+        .flatten()
+        .min();
+
+        let Some(deadline) = earliest else {
+            return default_ms;
+        };
+        let now = Instant::now();
+        if deadline <= now {
+            0
+        } else {
+            ((deadline - now).as_micros().div_ceil(1000) as i32).min(default_ms)
+        }
     }
 
     /// Stops the currently sounding arp note, if any. Returns `true` if a note was stopped.
@@ -67,49 +190,179 @@ impl Arpeggiator {
         true
     }
 
-    /// Advances the arpeggiator clock. Returns `true` if key LEDs should be refreshed.
-    pub fn tick(&mut self, tg: &mut TargetDevice, held_notes: &BTreeSet<u8>) -> bool {
-        if !self.settings.active || held_notes.is_empty() {
-            return self.stop(tg);
+    /// Advances the arpeggiator clock and applies staged params once the pattern finishes.
+    pub fn tick(&mut self, tg: &mut TargetDevice, held_notes: &BTreeSet<u8>) -> TickOutcome {
+        if !self.active || held_notes.is_empty() {
+            let leds_dirty = self.stop(tg);
+            let display_dirty = self.commit_staged_params();
+            self.step_index = 0;
+            self.next_step_at = None;
+            self.chord_arm_until = None;
+            return TickOutcome {
+                leds_dirty,
+                display_dirty,
+            };
         }
 
         let now = Instant::now();
-        let mut leds_dirty = false;
+        let mut outcome = TickOutcome::default();
 
         if self.active_note.is_some_and(|n| n.is_expired(now)) {
-            leds_dirty |= self.stop(tg);
+            outcome.leds_dirty |= self.stop(tg);
         }
 
-        let step_dur = self.settings.step_duration();
-        if now.duration_since(self.last_tick) >= step_dur {
-            self.last_tick = now;
-            self.stop(tg);
-
-            let notes = self.expand_notes(held_notes);
-            if notes.is_empty() {
-                return leds_dirty;
+        if let Some(arm_until) = self.chord_arm_until {
+            if now < arm_until {
+                return outcome;
             }
-
-            let note = self
-                .settings
-                .pattern
-                .next_note(&notes, &mut self.settings.step_index);
-
-            for out in tg.midi_outs_mut() {
-                let _ = out.note_on(0, note, 100);
+            self.chord_arm_until = None;
+        } else if let Some(next_at) = self.next_step_at {
+            if now < next_at {
+                return outcome;
             }
-
-            let gate_dur = step_dur.mul_f32(self.settings.gate as f32 / 100.0);
-            self.active_note = Some(ActiveArpNote::new(note, now, gate_dur));
-            leds_dirty = true;
         }
 
-        leds_dirty
+        let prev_deadline = self.next_step_at.take();
+
+        // Check if the previous pattern cycle has finished playing its last note.
+        let current_notes = Self::expand_notes(held_notes, self.active_params.octaves);
+        let current_cycle_len = self.active_params.pattern.cycle_len(current_notes.len());
+        if current_cycle_len == 0 || self.step_index >= current_cycle_len {
+            self.step_index = 0;
+            if self.commit_staged_params() {
+                outcome.display_dirty = true;
+            }
+        }
+
+        let notes = Self::expand_notes(held_notes, self.active_params.octaves);
+        if notes.is_empty() {
+            return outcome;
+        }
+        let cycle_len = self.active_params.pattern.cycle_len(notes.len());
+        if self.step_index >= cycle_len {
+            self.step_index = 0;
+        }
+
+        self.stop(tg);
+
+        let note = self.active_params.pattern.note_at(&notes, self.step_index);
+        self.step_index += 1;
+
+        for out in tg.midi_outs_mut() {
+            let _ = out.note_on(0, note, 100);
+        }
+
+        let step_dur = self.active_params.step_duration();
+        let gate_dur = step_dur.mul_f32(self.active_params.gate as f32 / 100.0);
+        self.active_note = Some(ActiveArpNote::new(note, now, gate_dur));
+
+        let next = prev_deadline.map_or(now + step_dur, |deadline| {
+            let candidate = deadline + step_dur;
+            if candidate > now {
+                candidate
+            } else {
+                now + step_dur
+            }
+        });
+        self.next_step_at = Some(next);
+        outcome.leds_dirty = true;
+
+        outcome
     }
 
-    fn expand_notes(&self, base_notes: &BTreeSet<u8>) -> Vec<u8> {
-        let mut notes = Vec::with_capacity(base_notes.len() * self.settings.octaves);
-        for oct in 0..self.settings.octaves {
+    pub fn handle_menu(&mut self, action: MenuAction) {
+        match action {
+            MenuAction::Left => self.menu_item = self.menu_item.down(),
+            MenuAction::Right => self.menu_item = self.menu_item.up(),
+            MenuAction::Up | MenuAction::Down => {
+                let dir = if action == MenuAction::Up { 1 } else { -1 };
+                match self.menu_item {
+                    ArpMenuItem::Active => {
+                        self.active = !self.active;
+                        if !self.active {
+                            self.active_params = self.staged_params;
+                            self.step_index = 0;
+                            self.next_step_at = None;
+                            self.chord_arm_until = None;
+                        }
+                    }
+                    ArpMenuItem::Tempo => {
+                        self.staged_params.tempo =
+                            (self.staged_params.tempo + dir as f32).clamp(20.0, 300.0);
+                    }
+                    ArpMenuItem::Rate => {
+                        self.staged_params.rate = self.staged_params.rate.step(dir);
+                    }
+                    ArpMenuItem::Pattern => {
+                        self.staged_params.pattern = self.staged_params.pattern.step(dir);
+                    }
+                    ArpMenuItem::Octaves => {
+                        self.staged_params.octaves =
+                            (self.staged_params.octaves as i32 + dir).clamp(1, 4) as usize;
+                    }
+                    ArpMenuItem::Gate => {
+                        self.staged_params.gate =
+                            (self.staged_params.gate as i32 + dir).clamp(1, 100) as usize;
+                    }
+                }
+
+                if !self.is_playing() {
+                    self.active_params = self.staged_params;
+                }
+            }
+        }
+    }
+
+    pub fn menu_label(&self, item: ArpMenuItem) -> String {
+        if self.menu_item == item {
+            format!(">{}", item.title())
+        } else {
+            item.title().to_string()
+        }
+    }
+
+    pub fn menu_value(&self, item: ArpMenuItem) -> String {
+        let s = &self.staged_params;
+        let a = &self.active_params;
+        let mark = |changed: bool| if changed { "*" } else { "" };
+
+        match item {
+            ArpMenuItem::Active => {
+                if self.active {
+                    "ACTIVE".to_string()
+                } else {
+                    "DISABLED".to_string()
+                }
+            }
+            ArpMenuItem::Tempo => format!("{}{:.0}BPM", mark(s.tempo != a.tempo), s.tempo),
+            ArpMenuItem::Rate => format!("{}{}", mark(s.rate != a.rate), s.rate.display()),
+            ArpMenuItem::Pattern => {
+                format!("{}{}", mark(s.pattern != a.pattern), s.pattern.display())
+            }
+            ArpMenuItem::Octaves => format!("{}{} OCT", mark(s.octaves != a.octaves), s.octaves),
+            ArpMenuItem::Gate => format!("{}{}%", mark(s.gate != a.gate), s.gate),
+        }
+    }
+
+    fn is_playing(&self) -> bool {
+        self.active
+            && (self.next_step_at.is_some()
+                || self.chord_arm_until.is_some()
+                || self.active_note.is_some())
+    }
+
+    fn commit_staged_params(&mut self) -> bool {
+        if self.active_params != self.staged_params {
+            self.active_params = self.staged_params;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn expand_notes(base_notes: &BTreeSet<u8>, octaves: usize) -> Vec<u8> {
+        let mut notes = Vec::with_capacity(base_notes.len() * octaves);
+        for oct in 0..octaves {
             for &n in base_notes {
                 if let Some(trans) = (oct * 12)
                     .try_into()
@@ -122,93 +375,6 @@ impl Arpeggiator {
             }
         }
         notes
-    }
-}
-
-pub struct ArpSettings {
-    pub active: bool,
-    pub tempo: f32,
-    pub pattern: ArpPattern,
-    pub rate: ArpRate,
-    pub octaves: usize,
-    pub gate: usize,
-    pub step_index: usize,
-    pub menu_selection: u8,
-    pub color: KeyColor,
-}
-
-impl ArpSettings {
-    pub fn default() -> Self {
-        Self {
-            active: true,
-            tempo: 120.0,
-            rate: ArpRate::default(),
-            octaves: 1,
-            gate: 100,
-            pattern: ArpPattern::default(),
-            step_index: 0,
-            menu_selection: 0,
-            color: KeyColor { r: 0, g: 0, b: 255 },
-        }
-    }
-    pub fn menu_selection_active_prefix(&self, index: u8) -> char {
-        if self.menu_selection == index {
-            '>'
-        } else {
-            ' '
-        }
-    }
-
-    pub fn step_duration(&self) -> Duration {
-        let beat_ms = 60_000.0 / self.tempo.max(20.0);
-        Duration::from_secs_f32((beat_ms * self.rate.factor()) / 1000.0)
-    }
-
-    pub fn change_entry(&mut self, action: MenuAction) {
-        match action {
-            MenuAction::Left => {
-                self.menu_selection = (self.menu_selection - 1) % 2;
-                print!("{}", self.menu_selection)
-            }
-            MenuAction::Right => {
-                self.menu_selection = self.menu_selection + 1 % 2;
-                print!("{}", self.menu_selection)
-            }
-            MenuAction::Down => {
-                if self.menu_selection == 0 {
-                    self.active = !self.active;
-                } else if self.menu_selection == 1 {
-                    self.tempo -= 1.00;
-                } else if self.menu_selection == 2 {
-                    self.pattern = self.pattern.down();
-                } else if self.menu_selection == 3 {
-                    self.rate = self.rate.down();
-                } else if self.menu_selection == 4 {
-                    self.octaves -= 1;
-                } else if self.menu_selection == 5 {
-                    self.gate -= 1;
-                } else if self.menu_selection == 6 {
-                    self.step_index -= 1;
-                }
-            }
-            MenuAction::Up => {
-                if (self.menu_selection == 0) {
-                    self.active = !self.active;
-                } else if self.menu_selection == 1 {
-                    self.tempo += 1.00;
-                } else if self.menu_selection == 2 {
-                    self.pattern = self.pattern.up();
-                } else if self.menu_selection == 3 {
-                    self.rate = self.rate.up();
-                } else if self.menu_selection == 4 {
-                    self.octaves += 1;
-                } else if self.menu_selection == 5 {
-                    self.gate += 1;
-                } else if self.menu_selection == 6 {
-                    self.step_index += 1;
-                }
-            }
-        }
     }
 }
 
@@ -233,6 +399,14 @@ pub trait Cycle: Copy + PartialEq + 'static {
     fn down(self) -> Self {
         let i = Self::ALL.iter().position(|&v| v == self).unwrap();
         Self::ALL[(i + Self::ALL.len() - 1) % Self::ALL.len()]
+    }
+
+    fn step(self, dir: i32) -> Self {
+        if dir >= 0 {
+            self.up()
+        } else {
+            self.down()
+        }
     }
 }
 
@@ -282,29 +456,36 @@ impl ArpPattern {
         }
     }
 
-    pub fn next_note(self, notes: &[u8], step_index: &mut usize) -> u8 {
+    /// Number of steps in one complete pattern cycle for `note_count` expanded notes.
+    pub fn cycle_len(self, note_count: usize) -> usize {
         match self {
-            ArpPattern::Up => {
-                let idx = *step_index % notes.len();
-                *step_index = (*step_index + 1) % notes.len();
-                notes[idx]
-            }
-            ArpPattern::Down => {
-                let idx = notes.len() - 1 - (*step_index % notes.len());
-                *step_index = (*step_index + 1) % notes.len();
-                notes[idx]
-            }
+            ArpPattern::Up | ArpPattern::Down => note_count,
             ArpPattern::UpDown => {
-                if notes.len() == 1 {
+                if note_count <= 1 {
+                    note_count
+                } else {
+                    (note_count - 1) * 2
+                }
+            }
+        }
+    }
+
+    /// Returns the note at `step` (`0..cycle_len`) within ascending `notes`.
+    pub fn note_at(self, notes: &[u8], step: usize) -> u8 {
+        let len = notes.len();
+        match self {
+            ArpPattern::Up => notes[step % len],
+            ArpPattern::Down => notes[len - 1 - (step % len)],
+            ArpPattern::UpDown => {
+                if len == 1 {
                     notes[0]
                 } else {
-                    let total_steps = (notes.len() - 1) * 2;
-                    let phase = *step_index % total_steps;
-                    *step_index = (*step_index + 1) % total_steps;
-                    if phase < notes.len() {
+                    let total = (len - 1) * 2;
+                    let phase = step % total;
+                    if phase < len {
                         notes[phase]
                     } else {
-                        notes[total_steps - phase]
+                        notes[total - phase]
                     }
                 }
             }

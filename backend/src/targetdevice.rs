@@ -218,6 +218,7 @@ impl TargetDevice {
         self.device = Some(device);
         self.button_state = [0; BUTTON_BYTES];
         self.encoder_state = None;
+        self.display.invalidate();
 
         if let Err(e) = self.open_midi() {
             eprintln!("warning: {e} (key and slider events will not be available)");
@@ -648,17 +649,18 @@ impl TargetDevice {
         &mut self.display
     }
 
-    /// Send the display buffer to the hardware.
-    pub fn flush_display(&self) -> Result<(), KeyboardError> {
+    /// Send changed rows of the display buffer to the hardware.
+    pub fn flush_display(&mut self) -> Result<(), KeyboardError> {
         let device = self
             .device
             .as_ref()
             .ok_or(KeyboardError::KeyboardNotConnected)?;
-        for report in self.display.reports() {
+        for report in self.display.pending_reports() {
             device
                 .write(&report)
                 .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
         }
+        self.display.mark_flushed();
         Ok(())
     }
 }
