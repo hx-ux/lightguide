@@ -3,7 +3,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use backend::{models::keycolor::KeyColor, targetdevice::TargetDevice};
+use backend::{
+    keyboard_error::DeviceError, models::keycolor::KeyColor, targetdevice::TargetDevice,
+};
+use serde::{Deserialize, Serialize};
 
 /// All keys pressed in this timespan gets merged as an chord
 const CHORD_CAPTURE_WINDOW: Duration = Duration::from_millis(15);
@@ -42,7 +45,7 @@ impl ActiveArpNote {
 }
 
 /// Musical parameters of the arpeggiator (staged while playing, applied at pattern end).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ArpParams {
     pub tempo: f32,
     pub rate: ArpRate,
@@ -74,12 +77,12 @@ impl ArpParams {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ArpMenuItem {
     #[default]
-    Active,
-    Tempo,
-    Rate,
-    Pattern,
-    Octaves,
-    Gate,
+    Active = 0,
+    Tempo = 1,
+    Rate = 2,
+    Pattern = 3,
+    Octaves = 4,
+    Gate = 5,
 }
 
 impl Cycle for ArpMenuItem {
@@ -107,15 +110,23 @@ impl ArpMenuItem {
 }
 
 /// Arpeggiator playback engine with pattern-quantized parameter updates.
+///
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
 pub struct Arpeggiator {
     pub active: bool,
     pub color: KeyColor,
+    #[serde(skip)]
     pub menu_item: ArpMenuItem,
     active_params: ArpParams,
+    #[serde(skip)]
     staged_params: ArpParams,
     step_index: usize,
+    #[serde(skip)]
     next_step_at: Option<Instant>,
+    #[serde(skip)]
     chord_arm_until: Option<Instant>,
+    #[serde(skip)]
     active_note: Option<ActiveArpNote>,
 }
 
@@ -376,9 +387,32 @@ impl Arpeggiator {
         }
         notes
     }
+
+    /// Serialize the device configuration to a JSON string.
+    pub fn to_json(&self) -> Result<String, DeviceError> {
+        serde_json::to_string_pretty(self).map_err(Into::into)
+    }
+
+    /// Deserialize a `TargetDevice` configuration from a JSON string.
+    pub fn from_json(json: &str) -> Result<Self, DeviceError> {
+        serde_json::from_str(json).map_err(Into::into)
+    }
+
+    /// Save the device configuration to a JSON file.
+    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), DeviceError> {
+        let json = self.to_json()?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+
+    /// Read and deserialize a device configuration from a JSON file.
+    pub fn read<P: AsRef<std::path::Path>>(path: P) -> Result<Self, DeviceError> {
+        let content = std::fs::read_to_string(path)?;
+        Self::from_json(&content)
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ArpRate {
     Rate1_4 = 0,
     #[default]
@@ -435,7 +469,7 @@ impl ArpRate {
 }
 
 /// Arpeggiator direction / pattern
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ArpPattern {
     #[default]
     Up,

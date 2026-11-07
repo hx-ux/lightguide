@@ -26,8 +26,8 @@ cargo run --bin Lightguide_CLI -- midi-ports       # list all MIDI inputs & outp
 You can run the automatic mode via:
 `cargo run -p cli -- automatic`
 
-You can also create your own config:
-`cargo run -p cli -- save-config config.json`
+Recreate the default config files:
+`cargo run -p cli -- init-config`
 
 And run automatic mode with it
 `cargo run -p cli -- --config config.json automatic`

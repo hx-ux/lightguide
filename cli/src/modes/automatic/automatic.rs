@@ -2,7 +2,7 @@ use backend::{
     display::TextAlignment,
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
     extensions::pitch_extension::StringExt,
-    keyboard_error::KeyboardError,
+    keyboard_error::DeviceError,
     models::keycolor::KeyColor,
     targetdevice::TargetDevice,
 };
@@ -61,20 +61,20 @@ pub struct AutomaticMode {
 }
 
 impl AutomaticMode {
-    pub fn new() -> Self {
+    pub fn new(arp: Arpeggiator) -> Self {
         Self {
             mode: Mode::Performance,
             knobs: [0.0; NUM_KNOBS],
             notes: HeldNotes::default(),
             shift: false,
             last_first_note: 0,
-            arp: Arpeggiator::default(),
+            arp,
             leds_dirty: false,
             display_dirty: false,
         }
     }
 
-    pub fn run(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
+    pub fn run(&mut self, tg: &mut TargetDevice) -> Result<(), DeviceError> {
         if !tg.is_midi_connected() {
             eprintln!("warning: MIDI not connected - keys won't light up");
         }
@@ -106,7 +106,7 @@ impl AutomaticMode {
         }
     }
 
-    fn handle(&mut self, tg: &mut TargetDevice, ev: InputEvent) -> Result<(), KeyboardError> {
+    fn handle(&mut self, tg: &mut TargetDevice, ev: InputEvent) -> Result<(), DeviceError> {
         match ev {
             InputEvent::Button { button, pressed } => self.on_button(tg, button, pressed),
             InputEvent::Key(key) => self.on_key(tg, key),
@@ -124,7 +124,7 @@ impl AutomaticMode {
     }
 
     /// stored and stay lit until the pedal goes back to not active
-    fn on_sustain(&mut self, tg: &mut TargetDevice, value: i32) -> Result<(), KeyboardError> {
+    fn on_sustain(&mut self, tg: &mut TargetDevice, value: i32) -> Result<(), DeviceError> {
         if !self.arp.active {
             tg.send_midi_event(&InputEvent::Slider {
                 slider: Slider::Sustain,
@@ -142,7 +142,7 @@ impl AutomaticMode {
         tg: &mut TargetDevice,
         button: Button,
         pressed: bool,
-    ) -> Result<(), KeyboardError> {
+    ) -> Result<(), DeviceError> {
         if button == Button::Shift {
             self.shift = pressed;
             return Ok(());
@@ -206,7 +206,7 @@ impl AutomaticMode {
         Ok(())
     }
 
-    fn on_key(&mut self, tg: &mut TargetDevice, key: KeyEvent) -> Result<(), KeyboardError> {
+    fn on_key(&mut self, tg: &mut TargetDevice, key: KeyEvent) -> Result<(), DeviceError> {
         let was_empty = self.notes.active_notes().is_empty();
         self.notes.handle_key(key.note, key.pressed);
         if key.pressed {
@@ -225,7 +225,7 @@ impl AutomaticMode {
         &mut self,
         _tg: &mut TargetDevice,
         enc: EncoderEvent,
-    ) -> Result<(), KeyboardError> {
+    ) -> Result<(), DeviceError> {
         let Some(knob) = enc.index.checked_sub(1).filter(|&k| k < NUM_KNOBS) else {
             return Ok(());
         };
@@ -236,10 +236,17 @@ impl AutomaticMode {
             TICKS_PER_STEP
         };
         let old = self.knob_value(knob);
-        self.knobs[knob] = (self.knobs[knob] + enc.delta as f32 / ticks).clamp(0.0, KNOB_MAX);
+        match self.mode {
+            Mode::Performance => {
+                self.knobs[knob] =
+                    (self.knobs[knob] + enc.delta as f32 / ticks).clamp(0.0, KNOB_MAX);
 
-        if self.mode == Mode::Performance && self.knob_value(knob) != old {
-            self.display_dirty = true;
+                if self.mode == Mode::Performance && self.knob_value(knob) != old {
+                    self.display_dirty = true;
+                }
+            }
+            Mode::Scale => {}
+            Mode::Arp => if (enc.delta > 0) {},
         }
 
         Ok(())
@@ -268,12 +275,12 @@ impl AutomaticMode {
         self.knobs[knob].round() as u8
     }
 
-    fn render_all_components(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
+    fn render_all_components(&mut self, tg: &mut TargetDevice) -> Result<(), DeviceError> {
         self.render_display(tg)?;
         self.render_leds(tg)
     }
 
-    fn render_leds(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
+    fn render_leds(&mut self, tg: &mut TargetDevice) -> Result<(), DeviceError> {
         self.last_first_note = tg.first_note;
         let scale = Scale::new(tg.root_note, tg.scale);
         let mut colors: Vec<KeyColor> = (0..tg.keys)
@@ -307,7 +314,7 @@ impl AutomaticMode {
         tg.set_key_leds(&colors)
     }
 
-    fn render_display(&self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
+    fn render_display(&self, tg: &mut TargetDevice) -> Result<(), DeviceError> {
         tg.display_buffer_mut().clear();
         match self.mode {
             Mode::Performance => {

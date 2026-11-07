@@ -1,4 +1,4 @@
-use backend::{keyboard_error::KeyboardError, targetdevice::TargetDevice};
+use backend::{keyboard_error::DeviceError, targetdevice::TargetDevice};
 
 pub struct AutomaticListenMode {}
 
@@ -7,7 +7,7 @@ impl AutomaticListenMode {
         Self {}
     }
 
-    pub fn run_listen(&mut self, tg: &mut TargetDevice) -> Result<(), KeyboardError> {
+    pub fn run_listen(&mut self, tg: &mut TargetDevice) -> Result<(), DeviceError> {
         tg.on_button(|_dev, button, pressed| {
             println!(
                 "BUTTON {:?} {}",

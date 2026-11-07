@@ -4,7 +4,7 @@ use crate::{
     events::{Button, EncoderEvent, InputEvent, KeyEvent, Slider},
     extensions::{pitch_extension::pitch_serde, scale_extension::scale_serde},
     hid::HidConnection,
-    keyboard_error::KeyboardError,
+    keyboard_error::DeviceError,
     midi::{self, MidiLink},
     models::{keyboard_key::KeyboardKey, keycolor::KeyColor},
 };
@@ -123,35 +123,35 @@ impl TargetDevice {
     }
 
     /// Serialize the device configuration to a JSON string.
-    pub fn to_json(&self) -> Result<String, KeyboardError> {
+    pub fn to_json(&self) -> Result<String, DeviceError> {
         serde_json::to_string_pretty(self).map_err(Into::into)
     }
 
     /// Deserialize a `TargetDevice` configuration from a JSON string.
-    pub fn from_json(json: &str) -> Result<Self, KeyboardError> {
+    pub fn from_json(json: &str) -> Result<Self, DeviceError> {
         serde_json::from_str(json).map_err(Into::into)
     }
 
     /// Save the device configuration to a JSON file.
-    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), KeyboardError> {
+    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), DeviceError> {
         let json = self.to_json()?;
         std::fs::write(path, json)?;
         Ok(())
     }
 
     /// Read and deserialize a device configuration from a JSON file.
-    pub fn read<P: AsRef<std::path::Path>>(path: P) -> Result<Self, KeyboardError> {
+    pub fn read<P: AsRef<std::path::Path>>(path: P) -> Result<Self, DeviceError> {
         let content = std::fs::read_to_string(path)?;
         Self::from_json(&content)
     }
 
     /// Alias for `save`.
-    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), KeyboardError> {
+    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), DeviceError> {
         self.save(path)
     }
 
     /// Alias for `read`.
-    pub fn read_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, KeyboardError> {
+    pub fn read_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, DeviceError> {
         Self::read(path)
     }
 
@@ -188,7 +188,7 @@ impl TargetDevice {
     /// A missing MIDI port is *not* treated as an error, only a warning is
     /// printed; button / encoder events and the lights still work without it.
     ///
-    pub fn open_hid_device(&mut self) -> Result<(), KeyboardError> {
+    pub fn open_hid_device(&mut self) -> Result<(), DeviceError> {
         self.hid.open(self.vendor_id, self.product_id)?;
         self.display.invalidate();
 
@@ -199,7 +199,7 @@ impl TargetDevice {
     }
 
     /// Open the keyboard's MIDI input port using `self.midi_keyboard_device`.
-    pub fn open_midi(&mut self) -> Result<(), KeyboardError> {
+    pub fn open_midi(&mut self) -> Result<(), DeviceError> {
         let filter = if self.midi_keyboard_device.is_empty() {
             midi::DEFAULT_PORT_FILTER.to_string()
         } else {
@@ -209,7 +209,7 @@ impl TargetDevice {
     }
 
     /// Connect to a specific keyboard MIDI input port matching `filter` (case-insensitive).
-    pub fn open_keyboard_midi(&mut self, filter: &str) -> Result<(), KeyboardError> {
+    pub fn open_keyboard_midi(&mut self, filter: &str) -> Result<(), DeviceError> {
         self.midi_keyboard_link = None;
         self.midi_keyboard_link = Some(midi::MidiLink::connect(filter)?);
         Ok(())
@@ -217,7 +217,7 @@ impl TargetDevice {
 
     /// Add a MIDI output port matching `filter` (case-insensitive) to the
     /// list of outputs. Already connected ports are kept.
-    pub fn open_midi_out(&mut self, filter: &str) -> Result<(), KeyboardError> {
+    pub fn open_midi_out(&mut self, filter: &str) -> Result<(), DeviceError> {
         if filter.trim().is_empty() {
             return Ok(());
         }
@@ -235,7 +235,7 @@ impl TargetDevice {
 
     /// Close all outputs and connect every port in `self.midi_out_devices`.
     /// Returns one result per configured filter.
-    pub fn open_midi_outs(&mut self) -> Vec<(String, Result<(), KeyboardError>)> {
+    pub fn open_midi_outs(&mut self) -> Vec<(String, Result<(), DeviceError>)> {
         self.midi_outs.clear();
         let filters = self.midi_out_devices.clone();
         filters
@@ -266,32 +266,32 @@ impl TargetDevice {
     }
 
     // set all keys dark
-    pub fn notes_off(&self) -> Result<(), KeyboardError> {
+    pub fn notes_off(&self) -> Result<(), DeviceError> {
         self.set_key_leds(&[])
     }
 
-    pub fn set_scale_string(&mut self, scale: String) -> Result<(), KeyboardError> {
-        let s: Scale = scale.parse().map_err(|_| KeyboardError::InvalidScale)?;
+    pub fn set_scale_string(&mut self, scale: String) -> Result<(), DeviceError> {
+        let s: Scale = scale.parse().map_err(|_| DeviceError::InvalidScale)?;
         self.scale = s.kind;
         self.highlight_scale()?;
 
         Ok(())
     }
 
-    pub fn set_scale(&mut self, root: PitchClass, scale: ScaleKind) -> Result<(), KeyboardError> {
+    pub fn set_scale(&mut self, root: PitchClass, scale: ScaleKind) -> Result<(), DeviceError> {
         self.root_note = root;
         self.scale = scale;
         self.highlight_scale()?;
         Ok(())
     }
 
-    pub fn set_root(&mut self, root: PitchClass) -> Result<(), KeyboardError> {
+    pub fn set_root(&mut self, root: PitchClass) -> Result<(), DeviceError> {
         self.root_note = root;
         self.highlight_scale()?;
         Ok(())
     }
 
-    pub fn set_scale_kind(&mut self, scale: ScaleKind) -> Result<(), KeyboardError> {
+    pub fn set_scale_kind(&mut self, scale: ScaleKind) -> Result<(), DeviceError> {
         self.scale = scale;
         self.highlight_scale()?;
         Ok(())
@@ -313,7 +313,7 @@ impl TargetDevice {
             .collect()
     }
 
-    fn highlight_scale(&self) -> Result<(), KeyboardError> {
+    fn highlight_scale(&self) -> Result<(), DeviceError> {
         let colors: Vec<KeyColor> = self
             .keyboard_keys()
             .iter()
@@ -332,7 +332,7 @@ impl TargetDevice {
     ///
     /// `colors[i]` is the color of key `i` (0 = left-most key). Keys without
     /// an entry are switched off, surplus entries are ignored.
-    pub fn set_key_leds(&self, colors: &[KeyColor]) -> Result<(), KeyboardError> {
+    pub fn set_key_leds(&self, colors: &[KeyColor]) -> Result<(), DeviceError> {
         let mut report = vec![0u8; self.report_size];
         report[0] = self.key_leds_adress;
         for (pos, color) in colors.iter().take(self.keys).enumerate() {
@@ -341,13 +341,13 @@ impl TargetDevice {
         self.hid.write(&report)
     }
 
-    pub fn set_highlight_color(&mut self, color: KeyColor) -> Result<(), KeyboardError> {
+    pub fn set_highlight_color(&mut self, color: KeyColor) -> Result<(), DeviceError> {
         self.keys_hightlight_color = color;
         self.highlight_scale()?;
         Ok(())
     }
 
-    pub fn set_dim_color(&mut self, color: KeyColor) -> Result<(), KeyboardError> {
+    pub fn set_dim_color(&mut self, color: KeyColor) -> Result<(), DeviceError> {
         self.keys_dim_color = color;
         self.highlight_scale()?;
         Ok(())
@@ -412,7 +412,7 @@ impl TargetDevice {
     /// Blocks for at most `timeout_ms` waiting for a HID report. Keep the
     /// timeout small (e.g. 5 ms), MIDI key events are only delivered while
     /// this function is called.
-    pub fn poll(&mut self, timeout_ms: i32) -> Result<Vec<InputEvent>, KeyboardError> {
+    pub fn poll(&mut self, timeout_ms: i32) -> Result<Vec<InputEvent>, DeviceError> {
         let mut events = Vec::new();
         let mut had_midi = false;
 
@@ -435,7 +435,7 @@ impl TargetDevice {
     }
 
     /// Run [`Self::poll`] forever. Only returns on error.
-    pub fn run(&mut self) -> Result<(), KeyboardError> {
+    pub fn run(&mut self) -> Result<(), DeviceError> {
         loop {
             self.poll(5)?;
         }
@@ -443,7 +443,7 @@ impl TargetDevice {
 
     /// Kept for backwards compatibility: polls once (100 ms timeout) and
     /// dispatches the callbacks.
-    pub fn read_input(&mut self) -> Result<(), KeyboardError> {
+    pub fn read_input(&mut self) -> Result<(), DeviceError> {
         self.poll(100).map(|_| ())
     }
 
@@ -493,7 +493,7 @@ impl TargetDevice {
         line: usize,
         text: &str,
         align: TextAlignment,
-    ) -> Result<(), KeyboardError> {
+    ) -> Result<(), DeviceError> {
         self.display.set_text(display, line, text, align);
         self.flush_display()
     }
@@ -504,7 +504,7 @@ impl TargetDevice {
         top: &str,
         bottom: &str,
         align: TextAlignment,
-    ) -> Result<(), KeyboardError> {
+    ) -> Result<(), DeviceError> {
         for (line, text) in [top, bottom].into_iter().enumerate() {
             let chunks = display::split_across_displays(text);
             for d in 0..display::NUM_DISPLAYS {
@@ -516,13 +516,13 @@ impl TargetDevice {
     }
 
     /// Show a bar graph (0.0 ..= 1.0) above the text of one display.
-    pub fn display_bar(&mut self, display: usize, value: f32) -> Result<(), KeyboardError> {
+    pub fn display_bar(&mut self, display: usize, value: f32) -> Result<(), DeviceError> {
         self.display.set_bar(display, value);
         self.flush_display()
     }
 
     /// Blank all displays.
-    pub fn clear_display(&mut self) -> Result<(), KeyboardError> {
+    pub fn clear_display(&mut self) -> Result<(), DeviceError> {
         self.display.clear();
         self.flush_display()
     }
@@ -534,7 +534,7 @@ impl TargetDevice {
     }
 
     /// Send changed rows of the display buffer to the hardware.
-    pub fn flush_display(&mut self) -> Result<(), KeyboardError> {
+    pub fn flush_display(&mut self) -> Result<(), DeviceError> {
         for report in self.display.pending_reports() {
             self.hid.write(&report)?;
         }

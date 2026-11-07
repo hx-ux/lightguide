@@ -2,7 +2,7 @@
 
 use crate::{
     events::{Button, EncoderEvent, InputEvent},
-    keyboard_error::KeyboardError,
+    keyboard_error::DeviceError,
 };
 use core::fmt;
 use hidapi::{HidApi, HidDevice};
@@ -34,15 +34,15 @@ impl HidConnection {
         self.device.is_some()
     }
 
-    pub fn open(&mut self, vendor_id: u16, product_id: u16) -> Result<(), KeyboardError> {
-        let api = HidApi::new().map_err(|e| KeyboardError::CantConnectKeyboard(e.to_string()))?;
+    pub fn open(&mut self, vendor_id: u16, product_id: u16) -> Result<(), DeviceError> {
+        let api = HidApi::new().map_err(|e| DeviceError::CantConnectKeyboard(e.to_string()))?;
         let device = api
             .open(vendor_id, product_id)
-            .map_err(|e| KeyboardError::CantConnectKeyboard(e.to_string()))?;
+            .map_err(|e| DeviceError::CantConnectKeyboard(e.to_string()))?;
 
         device
             .write(&STARTUP_SEQUENCE)
-            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
+            .map_err(|e| DeviceError::CannotWriteData(e.to_string()))?;
 
         self.device = Some(device);
         self.button_state = [0; BUTTON_BYTES];
@@ -50,14 +50,14 @@ impl HidConnection {
         Ok(())
     }
 
-    pub fn write(&self, report: &[u8]) -> Result<(), KeyboardError> {
+    pub fn write(&self, report: &[u8]) -> Result<(), DeviceError> {
         let device = self
             .device
             .as_ref()
-            .ok_or(KeyboardError::KeyboardNotConnected)?;
+            .ok_or(DeviceError::KeyboardNotConnected)?;
         device
             .write(report)
-            .map_err(|e| KeyboardError::CannotWriteData(e.to_string()))?;
+            .map_err(|e| DeviceError::CannotWriteData(e.to_string()))?;
         Ok(())
     }
 
@@ -68,12 +68,12 @@ impl HidConnection {
         timeout_ms: i32,
         first_note: &mut u8,
         events: &mut Vec<InputEvent>,
-    ) -> Result<(), KeyboardError> {
+    ) -> Result<(), DeviceError> {
         if let Some(device) = &self.device {
             let mut buf = [0u8; 64];
             let n = device
                 .read_timeout(&mut buf, timeout_ms)
-                .map_err(|e| KeyboardError::CannotReadData(e.to_string()))?;
+                .map_err(|e| DeviceError::CannotReadData(e.to_string()))?;
             if n > 0 {
                 self.parse_report(&buf[..n], first_note, events);
             }
